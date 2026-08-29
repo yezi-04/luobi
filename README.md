@@ -2,6 +2,8 @@
 
 > 写作内核驱动的 AI 协作写作引擎
 
+🌐 **在线体验**：[https://yezi-04.github.io/luobi/](https://yezi-04.github.io/luobi/)
+
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 **落笔**是一款专注于长篇小说创作的 AI 辅助写作工具。它将你的写作规则编译为 AI 可执行的审查指令，并提供从创作、审稿到定稿的完整工作流。
