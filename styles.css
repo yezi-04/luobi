@@ -835,3 +835,27 @@ body.resizing .chat-area { pointer-events: none; }
     flex: 1;
     overflow-y: auto;
 }
+/* ============ 深度思考开关（输入框内嵌） ============ */
+.deep-think-toggle {
+    flex-shrink: 0;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: var(--button-bg);
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.15s ease;
+}
+.deep-think-toggle:hover {
+    background: var(--button-hover);
+}
+.deep-think-toggle.active {
+    background: var(--accent);
+    color: #FFFFFF;
+    border-color: var(--accent);
+}

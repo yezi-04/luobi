@@ -109,25 +109,6 @@ function toggleFocusMode() {
         DataCore.setUI('focusMode', true);
     }
 }
-
-// ====================================================================
-// 四、深度思考开关
-// ====================================================================
-function toggleDeepThink() {
-    const btn = document.getElementById('deepThinkBtn');
-    const isDeepThink = DataCore.getUI('deepThink') !== true;
-    currentModel = isDeepThink ? 'deepseek-reasoner' : 'deepseek-chat';
-    DataCore.setUI('deepThink', isDeepThink);
-
-    if (isDeepThink) {
-        btn.classList.add('active');
-        btn.textContent = '💭 深度思考 (开)';
-    } else {
-        btn.classList.remove('active');
-        btn.textContent = '💭 深度思考';
-    }
-}
-
 // ====================================================================
 // 五、页面初始化
 // ====================================================================
@@ -165,10 +146,9 @@ function initUIState() {
     // 恢复深度思考状态
     if (DataCore.getUI('deepThink') === true) {
         currentModel = 'deepseek-reasoner';
-        const btn = document.getElementById('deepThinkBtn');
+        const btn = document.getElementById('deepThinkToggle');
         if (btn) {
             btn.classList.add('active');
-            btn.textContent = '💭 深度思考 (开)';
         }
     }
 }

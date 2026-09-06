@@ -32,8 +32,8 @@ function initSessions() {
 }
 
 function saveSessions() {
-    DataCore.setSessions(null, sessions);
     ['style', 'plot', 'review', 'partner'].forEach(role => {
+        DataCore.setSessions(role, sessions[role]);
         DataCore.setCurrentSessionId(role, currentSessionId[role]);
     });
 }
@@ -105,8 +105,12 @@ function loadSessionToChat() {
         if (msg.role === 'user') {
             chatArea.innerHTML += `<div class="chat-user"><strong>👤 我</strong><br>${msg.content}</div>`;
         } else if (msg.role === 'assistant') {
-            chatArea.innerHTML += `<div class="chat-ai"><strong>🤖 ${getRoleName(currentRole)}</strong><br>${marked.parse(msg.content)}</div>`;
+        let reasoningHTML = '';
+        if (msg.reasoning && msg.reasoning.trim()) {
+            reasoningHTML = `<details open><summary>💭 思考过程</summary>${marked.parse(msg.reasoning)}</details>`;
         }
+        chatArea.innerHTML += `<div class="chat-ai"><strong>🤖 ${getRoleName(currentRole)}</strong><br>${reasoningHTML}${marked.parse(msg.content)}</div>`;
+    }
     });
     chatArea.scrollTop = chatArea.scrollHeight;
 }
@@ -172,6 +176,20 @@ function handleTextSelection(e) {
     askAI(selectedText);
     toggleAnalyzeMode();
     setTimeout(() => { window._lastSelectionKey = null; }, 500);
+}
+function toggleDeepThink() {
+    const btn = document.getElementById('deepThinkToggle');
+    const isDeepThink = DataCore.getUI('deepThink') !== true;
+    currentModel = isDeepThink ? 'deepseek-reasoner' : 'deepseek-chat';
+    DataCore.setUI('deepThink', isDeepThink);
+
+    if (btn) {
+        if (isDeepThink) {
+            btn.classList.add('active');
+        } else {
+            btn.classList.remove('active');
+        }
+    }
 }
 
 // ============ 快捷指令菜单 ============
@@ -394,7 +412,11 @@ async function askAI(selectedText) {
 
         session.history.push(
             { role: "user", content: userInput },
-            { role: "assistant", content: fullContent }
+            { 
+                role: "assistant", 
+                content: fullContent,
+                reasoning: reasoningContent 
+            }
         );
         saveSessions();
 
@@ -1127,11 +1149,12 @@ function deleteMemoryForeshadow(id) {
     renderMemoryPanel();
 }
 
-// ============ 页面初始化 ============
-window.addEventListener('DOMContentLoaded', () => {
+// ============ AI 模块初始化（由 index.html 在 DataCore.init 之后调用） ============
+function initAI() {
     initSessions();
     renderSessionList();
     loadSessionToChat();
+
     ['style', 'plot', 'review', 'partner'].forEach(role => {
         const chatArea = document.getElementById('chat-' + role);
         if (chatArea) {
@@ -1141,9 +1164,10 @@ window.addEventListener('DOMContentLoaded', () => {
             });
         }
     });
+
     const editor = document.getElementById('editor');
     if (editor) {
         editor.addEventListener('mouseup', handleTextSelection);
         editor.addEventListener('keyup', handleTextSelection);
     }
-});
+}
