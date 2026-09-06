@@ -107,6 +107,7 @@ function renderToc() {
         title.innerHTML = node.title + (typeof getFinalizeBadge === 'function' ? getFinalizeBadge(node.id) : '');
         li.appendChild(title);
 
+        // ★ 单击：卷则折叠/展开，章则打开
         li.addEventListener('click', (e) => {
             e.stopPropagation();
             if (node.type === 'volume') {
@@ -118,21 +119,24 @@ function renderToc() {
             }
         });
 
-        li.addEventListener('dblclick', (e) => {
-            e.stopPropagation();
-            startRename(node.id);
-        });
-
+        // 右键菜单
         li.addEventListener('contextmenu', (e) => {
             e.preventDefault();
             e.stopPropagation();
             contextMenuNodeId = node.id;
+            updateContextMenu(node.type);
             const menu = document.getElementById('contextMenu');
             if (menu) {
                 menu.style.display = 'block';
                 menu.style.left = e.pageX + 'px';
                 menu.style.top = e.pageY + 'px';
             }
+        });
+
+        // 双击重命名
+        li.addEventListener('dblclick', (e) => {
+            e.stopPropagation();
+            startRename(node.id);
         });
 
         tree.appendChild(li);
@@ -143,6 +147,18 @@ function renderToc() {
     }
 
     tocData.forEach(node => renderNode(node));
+}
+/**
+ * 根据节点类型动态显示/隐藏右键菜单项
+ * @param {string} nodeType - 'volume' 或 'chapter'
+ */
+function updateContextMenu(nodeType) {
+    const exportItem = document.getElementById('contextExport');
+    if (exportItem) {
+        // 仅章节显示「导出本章」，卷不显示
+        exportItem.style.display = (nodeType === 'chapter') ? '' : 'none';
+    }
+    // 其他菜单项对卷和章节都显示，无需额外处理
 }
 
 document.addEventListener('click', () => {
@@ -411,6 +427,67 @@ function initAutoSave() {
             if (currentId) saveContent(currentId, editor.value);
         }, 2000);
     });
+}
+// ============ 右键菜单操作 ============
+
+/**
+ * 隐藏右键菜单
+ */
+function hideContextMenu() {
+    const menu = document.getElementById('contextMenu');
+    if (menu) menu.style.display = 'none';
+}
+
+/**
+ * 右键：新建章节
+ * 基于当前右键选中的节点定位父卷
+ */
+function contextNewChapter() {
+    const nodeId = contextMenuNodeId;
+    if (!nodeId) return;
+
+    // 临时将当前章节设置为右键节点，以便 addChapter 定位父卷
+    const originalCurrentId = DataCore.getCurrentChapterId();
+    DataCore.setCurrentChapterId(nodeId);
+    addChapter();
+    DataCore.setCurrentChapterId(originalCurrentId);
+
+    hideContextMenu();
+}
+
+/**
+ * 右键：新建卷
+ */
+function contextNewVolume() {
+    addVolume();
+    hideContextMenu();
+}
+
+/**
+ * 右键：导入文件
+ * 触发文件选择器，导入后的文件会挂载到当前卷或章节所属卷下（当前 importFile 逻辑为第一个卷，后续可优化）
+ */
+function contextImport() {
+    const fileInput = document.getElementById('importFile');
+    if (fileInput) {
+        fileInput.click();
+    }
+    hideContextMenu();
+}
+
+/**
+ * 右键：导出本章
+ */
+function contextExport() {
+    const nodeId = contextMenuNodeId;
+    if (nodeId && findNode(nodeId)?.type === 'chapter') {
+        // 临时设置当前章节为所选章节，然后导出
+        const originalCurrentId = DataCore.getCurrentChapterId();
+        DataCore.setCurrentChapterId(nodeId);
+        exportCurrentChapter();
+        DataCore.setCurrentChapterId(originalCurrentId);
+    }
+    hideContextMenu();
 }
 
 // ===================== 初始化 =====================

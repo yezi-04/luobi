@@ -29,9 +29,13 @@
     </div>
 
     <div class="context-menu" id="contextMenu" style="display:none;">
-        <div class="context-item" onclick="renameNode()">✏️ 重命名</div>
-        <div class="context-item danger" onclick="deleteNode()">🗑️ 删除</div>
-    </div>
+    <div class="context-item" id="contextRename" onclick="renameNode()"> 重命名</div>
+    <div class="context-item" id="contextNewChapter" onclick="contextNewChapter()"> 新建章节</div>
+    <div class="context-item" id="contextNewVolume" onclick="contextNewVolume()"> 新建卷</div>
+    <div class="context-item" id="contextImport" onclick="contextImport()"> 导入文件</div>
+    <div class="context-item" id="contextExport" onclick="contextExport()"> 导出本章</div>
+    <div class="context-item danger" id="contextDelete" onclick="deleteNode()"> 删除</div>
+</div>
 
     <!-- 中间：写作区 -->
     <div class="editor-pane">
