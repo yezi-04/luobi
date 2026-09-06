@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>落笔</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="marked.min.js"></script>
+</head>
+<body>
+
+<div class="app">
+    <!-- 左侧：目录区 -->
+    <div class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <h3>📖 目录</h3>
+            <div class="sidebar-header-actions">
+                <button class="icon-btn" onclick="addVolume()" title="新建卷">📁+</button>
+                <button class="icon-btn" onclick="addChapter()" title="新建章节">📄+</button>
+                <button class="sidebar-toggle-btn" onclick="toggleSidebar()" title="收起目录">◀</button>
+            </div>
+        </div>
+        <ul class="toc-tree" id="tocTree"></ul>
+        <div class="resize-handle resize-handle-left" id="resizeHandleLeft"></div>
+    </div>
+
+    <div class="sidebar-collapsed" id="sidebarCollapsed" style="display:none;">
+        <button class="icon-btn" onclick="toggleSidebar()" title="展开目录">▶</button>
+    </div>
+
+    <div class="context-menu" id="contextMenu" style="display:none;">
+        <div class="context-item" onclick="renameNode()">✏️ 重命名</div>
+        <div class="context-item danger" onclick="deleteNode()">🗑️ 删除</div>
+    </div>
+
+    <!-- 中间：写作区 -->
+    <div class="editor-pane">
+        <div class="toolbar">
+            <button id="deepThinkBtn" class="toggle-btn" onclick="toggleDeepThink()">💭 深度思考</button>
+            <button id="analyzeModeBtn" class="toggle-btn" onclick="toggleAnalyzeMode()">✨ 分析模式</button>
+            <button id="aiToggleBtn" class="toggle-btn active" onclick="toggleAIPanel()">🤖 AI助手</button>
+            <button id="focusModeBtn" class="toggle-btn" onclick="toggleFocusMode()">🎯 专注模式</button>
+            <button onclick="openSearch(false)" title="查找替换 (Ctrl+F)">🔍 查找</button>
+            <button id="finalizeToggleBtn" class="toggle-btn" onclick="toggleFinalizePanel()">✅ 定稿</button>
+
+            <div class="settings-dropdown">
+                <button class="icon-btn" onclick="toggleSettingsMenu()" title="设置">⚙️</button>
+                <div class="settings-menu" id="settingsMenu" style="display:none;">
+                    <div class="settings-section">
+                        <span class="settings-label">主题</span>
+                        <select id="theme-selector" onchange="switchTheme(this.value)">
+                            <option value="default">☀️ 默认亮色</option>
+                            <option value="eye-care">🌿 护眼绿</option>
+                            <option value="warm">📜 暖黄/羊皮纸</option>
+                            <option value="dark">🌙 深色模式</option>
+                        </select>
+                    </div>
+                    <div class="settings-section">
+                        <span class="settings-label">编辑器字号</span>
+                        <input type="range" id="editorFontSizeSlider" min="14" max="28" value="18" oninput="updateEditorFontSize(this.value)">
+                        <span id="fontSizeValue">18px</span>
+                    </div>
+                    <div class="settings-section">
+                        <span class="settings-label">聊天区字号</span>
+                        <input type="range" id="chatFontSizeSlider" min="12" max="20" value="14" oninput="updateChatFontSize(this.value)">
+                        <span id="chatFontSizeValue">14px</span>
+                    </div>
+                    <div class="settings-divider"></div>
+                    <button onclick="exportCurrentChapter()">📥 导出本章</button>
+                    <button onclick="exportAllChapters()">📦 导出全部</button>
+                    <button onclick="document.getElementById('importFile').click()">📂 导入</button>
+                    <input type="file" id="importFile" accept=".txt,.md" style="display:none;" onchange="importFile(event)" multiple>
+                </div>
+            </div>
+        </div>
+
+        <div class="stats-bar" id="statsBar">
+            <span class="stat-item">📝 本章：<strong id="statChapter">0</strong> 字</span>
+            <span class="stat-separator">|</span>
+            <span class="stat-item">📚 全书：<strong id="statTotal">0</strong> 字</span>
+            <span class="stat-separator">|</span>
+            <span class="stat-item">⚡ 时速：<strong id="statSpeed">--</strong> 字/时</span>
+        </div>
+        <textarea id="editor" placeholder="落笔，此刻开始。"></textarea>
+    </div>
+
+    <!-- ========== 右侧：整合面板（Tab切换） ========== -->
+    <div class="right-pane" id="rightPane">
+    <div class="right-pane-tabs">
+        <div class="right-pane-tab active" id="tabAI" onclick="selectRightPane('ai')">💬 AI对话</div>
+        <div class="right-pane-tab" id="tabFinalize" onclick="selectRightPane('finalize')">📋 定稿流程</div>
+    </div>
+    <div class="right-pane-content">
+        <!-- AI 面板 -->
+        <div class="ai-pane" id="aiPaneContent">
+        <div class="resize-handle resize-handle-right" id="resizeHandleRight"></div>
+        <div class="tabs">
+            <div class="tab active" onclick="switchTab('style')">🎨 风格审核</div>
+            <div class="tab" onclick="switchTab('plot')">📈 剧情锚点</div>
+            <div class="tab" onclick="switchTab('review')">🔍 读者审阅</div>
+            <div class="tab" onclick="switchTab('partner')">💡 创作伙伴</div>
+            <button class="icon-btn" onclick="resetCurrentChat()" title="清空当前会话">🗑️</button>
+        </div>
+
+        <div class="session-bar" id="sessionBar">
+            <div class="session-list" id="sessionList"></div>
+            <button class="icon-btn" onclick="newSession()" title="新建会话">➕</button>
+        </div>
+
+        <div id="chat-style" class="chat-area"><p>🤖 风格审核已就绪。</p></div>
+        <div id="chat-plot" class="chat-area" style="display:none;"><p>📈 剧情锚点校验已就绪。</p></div>
+        <div id="chat-review" class="chat-area" style="display:none;"><p>🔍 读者审阅已就绪。</p></div>
+        <div id="chat-partner" class="chat-area" style="display:none;"><p>💡 创作伙伴已就绪。</p></div>
+
+        <div class="input-area">
+            <input type="text" id="ai-input" placeholder="直接问AI..." onkeydown="if(event.key==='Enter') askAI()">
+            <button onclick="askAI()">发送</button>
+            <button class="icon-btn" onclick="toggleRulePanel()" title="规则设置">⚙️</button>
+        </div>
+
+        <!-- 规则面板（已移除「外观」Tab） -->
+        <div class="rule-panel" id="rulePanel" style="display:none;">
+            <div class="rule-panel-header">
+                <span>⚙️ 审查规则开关</span>
+                <button class="icon-btn" onclick="aiExtractRules()" title="AI提取写作内核规则">🧠</button>
+                <button class="icon-btn" onclick="aiReviewAllRules()" title="AI审查全部规则库">🔍</button>
+                <button class="icon-btn" onclick="toggleRulePanel()">✕</button>
+            </div>
+
+            <div class="api-key-row">
+                <label for="apiKeyInput">🔑 API Key</label>
+                <input type="password" id="apiKeyInput" placeholder="输入 DeepSeek API Key" onchange="saveApiKey(this.value)">
+                <button class="icon-btn" onclick="toggleApiKeyVisibility()" title="显示/隐藏">👁️</button>
+            </div>
+
+            <div class="rule-tabs">
+                <div class="rule-tab active" onclick="switchRuleTab('style')">🎨 风格</div>
+                <div class="rule-tab" onclick="switchRuleTab('plot')">📈 剧情</div>
+                <div class="rule-tab" onclick="switchRuleTab('review')">🔍 读者</div>
+                <div class="rule-tab" onclick="switchRuleTab('partner')">💡 创作</div>
+                <div class="rule-tab" onclick="switchRuleTab('background')">📋 创作背景</div>
+                <div class="rule-tab" onclick="switchRuleTab('memory')">🧠 记忆库</div>
+            </div>
+
+            <div class="rule-list" id="ruleList"></div>
+
+            <div class="background-editor" id="backgroundEditor" style="display:none;">
+                <textarea id="backgroundText" placeholder="在这里粘贴你的创作背景……" oninput="autoSaveBackground()"></textarea>
+                <div style="margin-top:8px;">
+                    <label style="font-size:12px;font-weight:bold;">📋 设定摘要（给剧情锚点用，建议500字以内）</label>
+                    <textarea id="settingSummary" placeholder="精简版设定：世界背景、主要人物、当前故事进展..." style="width:100%;min-height:80px;margin-top:4px;" oninput="saveSettingSummary()"></textarea>
+                </div>
+                <div class="background-hint">💡 创作背景会根据角色智能注入。</div>
+            </div>
+
+            <!-- 记忆库面板 -->
+            <div class="memory-panel" id="memoryPanel" style="display:none;">
+                <div class="memory-section">
+                    <div class="memory-section-header">
+                        <span>👤 人物状态</span>
+                        <button class="icon-btn" onclick="addMemoryCharacter()" title="添加人物">+</button>
+                    </div>
+                    <div id="memoryCharacters" class="memory-list"></div>
+                </div>
+                <div class="memory-section">
+                    <div class="memory-section-header">
+                        <span>📌 伏笔追踪</span>
+                        <button class="icon-btn" onclick="addMemoryForeshadow()" title="添加伏笔">+</button>
+                    </div>
+                    <div id="memoryForeshadows" class="memory-list"></div>
+                </div>
+            </div>
+        </div>
+        </div>
+        <!-- 定稿面板 -->
+        <div class="finalize-pane" id="finalizePaneContent" style="display:none;">
+            <div class="finalize-pane-header">
+            <span>📋 定稿流程</span>
+            <span class="finalize-chapter-badge" id="finalizeChapterBadge">未选择章节</span>
+            <button class="icon-btn" onclick="toggleFinalizePanel()" title="关闭定稿面板">✕</button>
+        </div>
+
+        <div class="finalize-progress">
+            <div class="progress-step" id="fstep1">① 校验报告</div>
+            <div class="progress-step" id="fstep2">② 硬伤定位</div>
+            <div class="progress-step" id="fstep3">③ 修改完成</div>
+            <div class="progress-step" id="fstep4">④ 亮点锁定</div>
+            <div class="progress-step" id="fstep5">⑤ 定稿</div>
+        </div>
+
+        <div class="finalize-pane-actions">
+            <div class="finalize-divider"></div>
+            <div style="display: flex; gap: 8px; margin: 8px 0;">
+                <button onclick="saveDraft()" style="flex: 1;">💾 保存为草稿</button>
+                <button onclick="showDraftDiff()" class="finalize-primary-btn" style="flex: 1;">📊 对比草稿</button>
+            </div>
+            <div id="diffPreviewBox" class="diff-preview-box" style="display:none;"></div>
+
+            <button onclick="runFullFinalize()" id="btnFullFinalize" class="finalize-primary-btn">🚀 一键全部</button>
+            <div class="finalize-divider"></div>
+
+            <button onclick="generateCheckReport()" id="btnCheckReport">📋 生成校验报告</button>
+            <div id="checkReportBox" style="display:none;"></div>
+
+            <button onclick="startRoundOne()" id="btnRound1" disabled>🔍 第一轮：硬伤定位</button>
+            <div id="round1Box" style="display:none;"></div>
+
+            <button onclick="markRoundOneDone()" id="btnRound1Done" disabled>✅ 第一轮修改完成</button>
+
+            <button onclick="startRoundTwo()" id="btnRound2" disabled>⭐ 第二轮：亮点锁定</button>
+            <div id="round2Box" style="display:none;"></div>
+
+            <button onclick="finalizeChapter()" id="btnFinalize" disabled>📌 标记为定稿</button>
+            <button onclick="cancelFinalize()" class="cancel-btn">↩️ 取消定稿流程</button>
+        </div>
+
+        <div class="finalize-reports" id="finalizeReports">
+            <div class="finalize-reports-header">📁 已保存的定稿报告</div>
+            <div id="reportList" class="report-list">
+                <p style="font-size:11px;opacity:0.5;">暂无报告</p>
+            </div>
+        </div>
+
+        <div class="finalize-memory-hook">
+            <button onclick="extractToMemory()">🚀 发送至记忆库</button>
+        </div>
+        </div>
+    </div>
+</div>
+</div>
+
+<!-- 脚本加载 -->
+<script src="datacore.js"></script>
+<script src="config.js"></script>
+<script src="chapters.js"></script>
+<script src="ui.js"></script>
+<script src="search.js"></script>
+<script src="diff.js"></script>
+<script src="stats.js"></script>
+<script src="memory.js"></script>
+<script src="finalize.js"></script>
+<script src="ai.js"></script>
+<script>
+    window.addEventListener('DOMContentLoaded', () => {
+        DataCore.init();
+        if (typeof initApiKeyField === 'function') initApiKeyField();
+        initUI();
+        initChapters();
+        if (typeof initAI === 'function') initAI();
+    });
+</script>
+
+<!-- 移动端组件 -->
+<div class="mobile-overlay" id="mobileOverlay" onclick="closeMobileAI()"></div>
+<div class="mobile-ai-drawer" id="mobileAIDrawer">
+    <div class="drawer-handle"></div>
+    <div class="tabs">
+        <div class="tab active" onclick="switchTab('style')">🎨 风格</div>
+        <div class="tab" onclick="switchTab('plot')">📈 剧情</div>
+        <div class="tab" onclick="switchTab('review')">🔍 读者</div>
+        <div class="tab" onclick="switchTab('partner')">💡 伙伴</div>
+    </div>
+    <div id="mobile-chat-style" class="chat-area"><p>🤖 风格审核就绪</p></div>
+    <div id="mobile-chat-plot" class="chat-area" style="display:none;"><p>📈 剧情锚点就绪</p></div>
+    <div id="mobile-chat-review" class="chat-area" style="display:none;"><p>🔍 读者审阅就绪</p></div>
+    <div id="mobile-chat-partner" class="chat-area" style="display:none;"><p>💡 创作伙伴就绪</p></div>
+    <div class="input-area">
+        <input type="text" id="mobile-ai-input" placeholder="输入问题..." onkeydown="if(event.key==='Enter') mobileAskAI()">
+        <button onclick="mobileAskAI()">发送</button>
+    </div>
+</div>
+<button class="mobile-ai-fab" onclick="openMobileAI()">🤖</button>
+
+<!-- 查找替换栏 -->
+<div class="search-overlay" id="searchOverlay" style="display:none;">
+    <div class="search-bar-floating">
+        <div class="search-row">
+            <input type="text" id="searchInput" placeholder="查找...">
+            <span class="search-count" id="searchCount"></span>
+            <button class="icon-btn" onclick="findPrev()" title="上一个">▲</button>
+            <button class="icon-btn" onclick="findNext()" title="下一个">▼</button>
+            <button class="icon-btn" onclick="toggleReplace()" title="替换">⇄</button>
+            <button class="icon-btn" onclick="closeSearch()" title="关闭">✕</button>
+        </div>
+        <div class="replace-row" id="replaceRow" style="display:none;">
+            <input type="text" id="replaceInput" placeholder="替换为...">
+            <button onclick="replaceOne()">替换</button>
+            <button onclick="replaceAll()">全部替换</button>
+        </div>
+    </div>
+</div>
+
+<!-- 快捷指令菜单 -->
+<div class="quick-command-overlay" id="quickCommandOverlay" style="display:none;">
+    <div class="quick-command-menu" id="quickCommandMenu">
+        <div class="quick-command-title">选择分析指令</div>
+        <div class="quick-command-list" id="quickCommandList"></div>
+        <button class="quick-command-cancel" onclick="cancelQuickCommand()">取消</button>
+    </div>
+</div>
+</body>
+</html>
