@@ -292,20 +292,26 @@ function initResizeHandles() {
 }
 function initRightPane() {
     const savedTab = DataCore.getUI('rightPaneTab') || 'ai';
-    // 清理初始 HTML 中可能存在的默认 active 状态，确保用持久化值还原 UI
+    // 清理初始 HTML 中可能存在的默认 active 状态
     const tabAI = document.getElementById('tabAI');
     const tabFinalize = document.getElementById('tabFinalize');
     if (tabAI) tabAI.classList.remove('active');
     if (tabFinalize) tabFinalize.classList.remove('active');
 
-    // 根据持久化值设置面板（switchRightPane 会处理内容与 tab 的 active 状态）
+    // 根据持久化值设置面板
     switchRightPane(savedTab);
 
-    // 额外保证 AI 面板切换按钮状态与当前选项卡一致（只是视觉同步）
+    // 同步工具栏按钮状态
     const aiToggleBtn = document.getElementById('aiToggleBtn');
     if (aiToggleBtn) {
         if (savedTab === 'ai') aiToggleBtn.classList.add('active');
         else aiToggleBtn.classList.remove('active');
+    }
+
+    // 初始化完成，移除隐藏类，显示面板
+    const rightPaneContent = document.querySelector('.right-pane-content');
+    if (rightPaneContent) {
+        rightPaneContent.classList.remove('initializing');
     }
 }
 function initUI() {

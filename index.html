@@ -89,7 +89,7 @@
         <div class="right-pane-tab active" id="tabAI" onclick="selectRightPane('ai')">💬 AI对话</div>
         <div class="right-pane-tab" id="tabFinalize" onclick="selectRightPane('finalize')">📋 定稿流程</div>
     </div>
-    <div class="right-pane-content">
+    <div class="right-pane-content initializing">
         <!-- AI 面板 -->
         <div class="ai-pane" id="aiPaneContent">
         <div class="resize-handle resize-handle-right" id="resizeHandleRight"></div>
@@ -241,13 +241,12 @@
 <script src="finalize.js"></script>
 <script src="ai.js"></script>
 <script>
-    window.addEventListener('DOMContentLoaded', () => {
-        DataCore.init();
-        if (typeof initApiKeyField === 'function') initApiKeyField();
-        initUI();
-        initChapters();
-        if (typeof initAI === 'function') initAI();
-    });
+    // 立即执行初始化，确保渲染前完成所有状态恢复，消除闪烁
+    DataCore.init();
+    if (typeof initApiKeyField === 'function') initApiKeyField();
+    initUI();
+    initChapters();
+    if (typeof initAI === 'function') initAI();
 </script>
 
 <!-- 移动端组件 -->

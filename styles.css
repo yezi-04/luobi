@@ -20,7 +20,7 @@ body, html {
     height: 100vh;
 }
 
-/* ============ 主题颜色变量（保留旧版四套配色） ============ */
+/* ============ 主题颜色变量 ============ */
 :root {
     --bg-color: #ffffff;
     --text-color: #1a1a1a;
@@ -99,7 +99,7 @@ body, html {
     --accent-light: #1e3a5f;
 }
 
-/* ============ 侧栏（目录） ============ */
+/* ============ 目录区 ============ */
 .sidebar {
     width: 240px;
     min-width: 240px;
@@ -274,19 +274,76 @@ body, html {
 .stat-item strong { font-weight: 600; color: var(--text-secondary); }
 .stat-separator { color: var(--border-color); margin: 0 2px; }
 
-/* ============ AI 面板 ============ */
-.ai-pane {
+/* ============ 右侧整合面板 ============ */
+.right-pane {
     width: 340px;
     min-width: 280px;
-    max-width: 560px;
-    background: var(--ai-pane-bg);
-    border-left: 1px solid var(--border-color);
+    max-width: 600px;
     display: flex;
     flex-direction: column;
-    padding: 16px;
-    position: relative;
+    flex-shrink: 0;
+    background: var(--ai-pane-bg);
+    border-left: 1px solid var(--border-color);
+    overflow: hidden;
 }
 
+.right-pane-tabs {
+    display: flex;
+    gap: 4px;
+    padding: 0 12px;
+    border-bottom: 1px solid var(--border-color);
+    background: var(--ai-pane-bg);
+    flex-shrink: 0;
+}
+
+.right-pane-tab {
+    padding: 10px 16px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s ease;
+    user-select: none;
+}
+
+.right-pane-tab:hover {
+    color: var(--text-color);
+    background: var(--button-hover);
+}
+
+.right-pane-tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+    font-weight: 600;
+}
+
+.right-pane-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    min-width: 0;
+    width: 100%;
+}
+
+/* AI 面板与定稿面板在 right-pane 内部 */
+.right-pane-content .ai-pane,
+.right-pane-content .finalize-pane {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    border-left: none;
+    padding: 16px;
+    position: relative;
+    background: transparent;
+}
+
+/* ============ AI 面板内部元素 ============ */
 .tabs { display: flex; gap: 2px; flex-wrap: wrap; }
 .tab {
     padding: 6px 12px;
@@ -335,7 +392,12 @@ body, html {
     padding-top: 12px;
 }
 
-.input-area { display: flex; gap: 8px; }
+.input-area {
+    display: flex;
+    gap: 8px;
+    min-width: 0;
+    flex-shrink: 0;
+}
 #ai-input {
     flex: 1;
     padding: 8px 12px;
@@ -345,10 +407,55 @@ body, html {
     color: var(--text-color);
     font-size: 13px;
     min-height: 40px;
+    min-width: 0;
+    flex-shrink: 1;
     resize: vertical;
     transition: border-color 0.15s;
 }
 #ai-input:focus { border-color: var(--accent); outline: none; }
+
+/* 深度思考开关 */
+.deep-think-toggle {
+    flex-shrink: 0;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: var(--button-bg);
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.15s ease;
+}
+.deep-think-toggle:hover { background: var(--button-hover); }
+.deep-think-toggle.active {
+    background: var(--accent);
+    color: #FFFFFF;
+    border-color: var(--accent);
+}
+
+/* ============ 定稿面板 ============ */
+.finalize-pane-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; font-weight: 600; }
+.finalize-chapter-badge { font-size: 11px; padding: 2px 10px; border-radius: 12px; background: var(--button-bg); color: var(--text-secondary); }
+.finalize-progress { display: flex; gap: 2px; margin-bottom: 12px; }
+.progress-step {
+    flex: 1; text-align: center; font-size: 9px; padding: 4px 0;
+    border-radius: 4px; background: var(--button-bg); color: var(--text-tertiary);
+    transition: all 0.2s;
+}
+.progress-step.active { background: var(--accent); color: #ffffff; font-weight: 600; }
+.progress-step.done { background: var(--accent-light); color: var(--accent); }
+.finalize-actions button { display: block; width: 100%; margin: 4px 0; text-align: left; }
+.finalize-primary-btn { background: var(--accent) !important; color: #ffffff !important; font-weight: 600 !important; }
+
+.report-content,
+.feedback-box {
+    border: 1px solid var(--border-color); border-radius: 6px; padding: 12px;
+    margin: 8px 0; background: var(--chat-bg); font-size: 13px; line-height: 1.6;
+}
 
 /* ============ 按钮 ============ */
 button {
@@ -557,34 +664,6 @@ body.resizing .chat-area { pointer-events: none; }
     background: var(--input-bg); color: var(--text-color); resize: vertical;
 }
 
-/* ============ 定稿面板 ============ */
-.finalize-pane {
-    width: 340px; min-width: 340px; background: var(--ai-pane-bg);
-    border-left: 1px solid var(--border-color); display: flex; flex-direction: column;
-    padding: 16px; overflow-y: auto; flex-shrink: 0;
-}
-.finalize-pane-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; font-weight: 600; }
-.finalize-chapter-badge { font-size: 11px; padding: 2px 10px; border-radius: 12px; background: var(--button-bg); color: var(--text-secondary); }
-.finalize-progress { display: flex; gap: 2px; margin-bottom: 12px; }
-.progress-step {
-    flex: 1; text-align: center; font-size: 9px; padding: 4px 0;
-    border-radius: 4px; background: var(--button-bg); color: var(--text-tertiary);
-    transition: all 0.2s;
-}
-.progress-step.active { background: var(--accent); color: #ffffff; font-weight: 600; }
-.progress-step.done { background: var(--accent-light); color: var(--accent); }
-.finalize-actions button { display: block; width: 100%; margin: 4px 0; text-align: left; }
-.finalize-primary-btn { background: var(--accent) !important; color: #ffffff !important; font-weight: 600 !important; }
-
-.report-content {
-    border: 1px solid var(--border-color); border-radius: 6px; padding: 12px;
-    margin: 8px 0; background: var(--chat-bg); font-size: 13px; line-height: 1.6;
-}
-.feedback-box {
-    border: 1px solid var(--border-color); border-radius: 6px; padding: 12px;
-    margin: 8px 0; background: var(--chat-bg); font-size: 13px;
-}
-
 /* ============ 会话列表 ============ */
 .session-bar { display: flex; align-items: center; gap: 4px; margin: 4px 0 8px; height: 28px; }
 .session-list { flex: 1; display: flex; gap: 4px; overflow-x: auto; white-space: nowrap; }
@@ -666,7 +745,8 @@ body.resizing .chat-area { pointer-events: none; }
 .setting-row { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; font-size: 12px; }
 .setting-row label { min-width: 70px; color: var(--text-secondary); }
 .setting-row input[type="range"] { flex: 1; accent-color: var(--accent); }
-/* ============ 文本差异对比样式 ============ */
+
+/* ============ 文本差异对比 ============ */
 .diff-container {
     border: 1px solid var(--border-color);
     border-radius: 6px;
@@ -677,39 +757,14 @@ body.resizing .chat-area { pointer-events: none; }
     max-height: 400px;
     overflow-y: auto;
 }
-.diff-line {
-    padding: 2px 12px;
-    white-space: pre-wrap;
-}
-.diff-unchanged {
-    color: var(--text-secondary);
-}
-.diff-added {
-    background: #dcfce7;
-    color: #166534;
-}
-.diff-removed {
-    background: #fce4ec;
-    color: #c62828;
-}
-.diff-marker {
-    display: inline-block;
-    width: 16px;
-    font-weight: bold;
-    user-select: none;
-}
-.diff-summary {
-    font-size: 11px;
-    color: var(--text-tertiary);
-    margin-top: 8px;
-    text-align: right;
-}
-/* ============ 内联差异对比样式 ============ */
-.diff-inline-container {
-    line-height: 1.8;
-    white-space: pre-wrap;
-}
+.diff-line { padding: 2px 12px; white-space: pre-wrap; }
+.diff-unchanged { color: var(--text-secondary); }
+.diff-added { background: #dcfce7; color: #166534; }
+.diff-removed { background: #fce4ec; color: #c62828; }
+.diff-marker { display: inline-block; width: 16px; font-weight: bold; user-select: none; }
+.diff-summary { font-size: 11px; color: var(--text-tertiary); margin-top: 8px; text-align: right; }
 
+.diff-inline-container { line-height: 1.8; white-space: pre-wrap; }
 .diff-char-removed {
     color: #c62828;
     background-color: #ffebee;
@@ -717,7 +772,6 @@ body.resizing .chat-area { pointer-events: none; }
     padding: 0 1px;
     border-radius: 2px;
 }
-
 .diff-char-added {
     color: #166534;
     background-color: #dcfce7;
@@ -726,20 +780,17 @@ body.resizing .chat-area { pointer-events: none; }
     border-bottom: 2px solid #4ade80;
     border-radius: 2px;
 }
-
-/* ============ 定稿面板中的差异预览区 ============ */
 .diff-preview-box {
     margin-top: 12px;
     padding: 12px;
     border: 1px solid var(--border-color);
     border-radius: 8px;
-    background: var(--chat-bg);          /* 跟随主题的聊天区背景 */
-    color: var(--text-color);            /* 跟随主题的文字颜色 */
+    background: var(--chat-bg);
+    color: var(--text-color);
     max-height: 400px;
     overflow-y: auto;
     line-height: 1.8;
 }
-/* 微小修改合并块样式 */
 .diff-char-modified {
     background: #fff3cd;
     border-bottom: 2px dashed #ffc107;
@@ -747,115 +798,8 @@ body.resizing .chat-area { pointer-events: none; }
     padding: 0 2px;
     border-radius: 2px;
 }
-.diff-char-modified:hover {
-    background: #ffe69c;
-}
-/* ============ 右侧整合面板（Tab切换） ============ */
-.right-pane {
-    width: 340px;
-    min-width: 280px;
-    max-width: 600px;
-    display: flex;
-    flex-direction: column;
-    flex-shrink: 0;
-    min-width: 0;
-}
-
-.right-pane-tabs {
-    display: flex;
-    gap: 4px;
-    padding: 0 12px;
-    border-bottom: 1px solid var(--border-color);
-    background: var(--ai-pane-bg);
-    flex-shrink: 0;
-}
-
-.right-pane-tab {
-    padding: 10px 16px;
-    cursor: pointer;
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--text-secondary);
-    border-bottom: 2px solid transparent;
-    transition: all 0.15s ease;
-    user-select: none;
-}
-
-.right-pane-tab:hover {
-    color: var(--text-color);
-    background: var(--button-hover);
-}
-
-.right-pane-tab.active {
-    color: var(--accent);
-    border-bottom-color: var(--accent);
-    font-weight: 600;
-}
-
-.right-pane-content {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-}
-
-/* AI 面板和定稿面板在 right-pane 内部的行为 */
-.right-pane-content .ai-pane,
-.right-pane-content .finalize-pane {
-    flex: 1;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-    overflow-y: auto;
-}
-
-/* ============ 修复输入框溢出 ============ */
-.input-area {
-    min-width: 0;
-    flex-shrink: 0;
-}
-
-#ai-input {
-    min-width: 0;
-    flex-shrink: 1;
-}
-/* 修复右侧面板内部内容宽度不随父容器缩放的问题 */
-.right-pane-content {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-    width: 100%;
-}
-.right-pane-content .ai-pane,
-.right-pane-content .finalize-pane {
-    width: 100% !important;
-    min-width: 0 !important;
-    max-width: none !important;
-    flex: 1;
-    overflow-y: auto;
-}
-/* ============ 深度思考开关（输入框内嵌） ============ */
-.deep-think-toggle {
-    flex-shrink: 0;
-    width: 36px;
-    height: 36px;
-    padding: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border: 1px solid var(--border-color);
-    border-radius: 6px;
-    background: var(--button-bg);
-    cursor: pointer;
-    font-size: 14px;
-    transition: all 0.15s ease;
-}
-.deep-think-toggle:hover {
-    background: var(--button-hover);
-}
-.deep-think-toggle.active {
-    background: var(--accent);
-    color: #FFFFFF;
-    border-color: var(--accent);
+.diff-char-modified:hover { background: #ffe69c; }
+/* ============ 初始化闪烁修复 ============ */
+.right-pane-content.initializing {
+    visibility: hidden;
 }
