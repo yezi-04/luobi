@@ -1127,12 +1127,11 @@ function deleteMemoryForeshadow(id) {
     renderMemoryPanel();
 }
 
-// ============ AI 模块初始化（由 index.html 在 DataCore.init 之后调用） ============
-function initAI() {
+// ============ 页面初始化 ============
+window.addEventListener('DOMContentLoaded', () => {
     initSessions();
     renderSessionList();
     loadSessionToChat();
-
     ['style', 'plot', 'review', 'partner'].forEach(role => {
         const chatArea = document.getElementById('chat-' + role);
         if (chatArea) {
@@ -1142,10 +1141,9 @@ function initAI() {
             });
         }
     });
-
     const editor = document.getElementById('editor');
     if (editor) {
         editor.addEventListener('mouseup', handleTextSelection);
         editor.addEventListener('keyup', handleTextSelection);
     }
-}
+});
