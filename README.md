@@ -1,6 +1,3 @@
-## 优化后的 `README.md`
-
-```markdown
 # 落笔 (Luobi)
 
 > 写作内核驱动的 AI 协作写作引擎
