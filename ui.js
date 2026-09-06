@@ -52,7 +52,7 @@ function toggleSidebar() {
 function toggleFocusMode() {
     const sidebar = document.getElementById('sidebar');
     const collapsed = document.getElementById('sidebarCollapsed');
-    const aiPane = document.getElementById('aiPane');
+    const aiPane = document.getElementById('rightPane');
     const btn = document.getElementById('focusModeBtn');
     const aiToggleBtn = document.getElementById('aiToggleBtn');
     const body = document.body;
@@ -134,7 +134,7 @@ function initUIState() {
 
     // 恢复 AI 面板状态
     if (DataCore.getUI('aiPanelOpen') === false) {
-        document.getElementById('aiPane').style.display = 'none';
+        document.getElementById('rightPane').style.display = 'none';
         document.getElementById('aiToggleBtn').classList.remove('active');
     }
 
