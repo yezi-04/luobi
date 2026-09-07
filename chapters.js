@@ -169,6 +169,11 @@ document.addEventListener('click', () => {
 // ===================== 章节操作 =====================
 
 function openChapter(nodeId) {
+    const saveStatus = document.getElementById('saveStatus');
+    if (saveStatus) {
+        saveStatus.textContent = '';
+        saveStatus.className = 'save-status';
+    }
     const currentId = DataCore.getCurrentChapterId();
     if (currentId) saveContent(currentId, document.getElementById('editor').value);
 
@@ -419,14 +424,42 @@ function initDragSort() {
 
 function initAutoSave() {
     const editor = document.getElementById('editor');
+    const saveStatus = document.getElementById('saveStatus');
     let saveTimer;
+
+    function setSaveStatus(text, className) {
+        if (!saveStatus) return;
+        saveStatus.textContent = text;
+        saveStatus.className = 'save-status' + (className ? ' ' + className : '');
+    }
+
+    function doSave() {
+        const currentId = DataCore.getCurrentChapterId();
+        if (!currentId) return;
+
+        setSaveStatus('保存中…', 'saving');
+
+        try {
+            saveContent(currentId, editor.value);
+            setSaveStatus('✓ 已保存', 'saved');
+
+            setTimeout(() => {
+                setSaveStatus('', '');
+            }, 2000);
+        } catch (e) {
+            setSaveStatus('⚠ 保存失败', 'error');
+            console.error('自动保存失败:', e);
+        }
+    }
+
     editor.addEventListener('input', () => {
         clearTimeout(saveTimer);
-        saveTimer = setTimeout(() => {
-            const currentId = DataCore.getCurrentChapterId();
-            if (currentId) saveContent(currentId, editor.value);
-        }, 2000);
+        setSaveStatus('…', 'saving');
+        saveTimer = setTimeout(doSave, 2000);
     });
+
+    // 初始隐藏状态
+    setSaveStatus('', '');
 }
 // ============ 右键菜单操作 ============
 

@@ -95,23 +95,63 @@ function renderSessionList() {
     `).join('');
 }
 
+function getWelcomeMessage(role) {
+    const roleWelcome = {
+        'style': '我是风格审核。选中一段文字或直接粘贴内容，我会检查白描、句式、用词等文本表达问题。',
+        'plot': '我是剧情锚点。把正文发给我，我会检查逻辑一致性、设定连贯性、伏笔回收情况。',
+        'review': '我是读者审阅。让我读你的文字，我会告诉你哪里让我出戏、哪里让我心动。',
+        'partner': getPartnerWelcome()
+    };
+    return roleWelcome[role] || '我是你的创作伙伴。告诉我你想写什么。';
+}
+
+function getPartnerWelcome() {
+    const currentId = DataCore.getCurrentChapterId();
+    const memory = DataCore.getMemory();
+    const openForeshadows = memory.foreshadows?.filter(f => f.status === 'open') || [];
+
+    if (!currentId) {
+        return '我是你的创作伙伴。先创建一个章节，然后告诉我你想写什么——哪怕只是一个模糊的感觉。';
+    }
+
+    const node = findNode(currentId);
+    const title = node ? node.title : '当前章节';
+    const progress = getCurrentChapterWordCount();
+
+    let msg = `你正在写「${title}」，已经写了 ${progress} 字。`;
+
+    if (openForeshadows.length > 0) {
+        msg += `\n⚠️ 有 ${openForeshadows.length} 个伏笔还没回收：${openForeshadows[0].description}。`;
+    }
+
+    return msg + '\n想继续写，还是想聊聊方向？';
+}
+
 function loadSessionToChat() {
     const chatArea = document.getElementById('chat-' + currentRole);
     if (!chatArea) return;
     const session = getCurrentSession();
     if (!session) return;
-    chatArea.innerHTML = '<p>🤖 AI助手已就绪。</p>';
-    session.history.forEach(msg => {
-        if (msg.role === 'user') {
-            chatArea.innerHTML += `<div class="chat-user"><strong>👤 我</strong><br>${msg.content}</div>`;
-        } else if (msg.role === 'assistant') {
-        let reasoningHTML = '';
-        if (msg.reasoning && msg.reasoning.trim()) {
-            reasoningHTML = `<details open><summary>💭 思考过程</summary>${marked.parse(msg.reasoning)}</details>`;
-        }
-        chatArea.innerHTML += `<div class="chat-ai"><strong>🤖 ${getRoleName(currentRole)}</strong><br>${reasoningHTML}${marked.parse(msg.content)}</div>`;
+
+    if (session.history && session.history.length > 0) {
+        // 有历史，渲染历史消息
+        chatArea.innerHTML = '';
+        session.history.forEach(msg => {
+            if (msg.role === 'user') {
+                chatArea.innerHTML += `<div class="chat-user"><strong>👤 我</strong><br>${msg.content}</div>`;
+            } else if (msg.role === 'assistant') {
+                let reasoningHTML = '';
+                if (msg.reasoning && msg.reasoning.trim()) {
+                    reasoningHTML = `<details open><summary>💭 思考过程</summary>${marked.parse(msg.reasoning)}</details>`;
+                }
+                chatArea.innerHTML += `<div class="chat-ai"><strong>🤖 ${getRoleName(currentRole)}</strong><br>${reasoningHTML}${marked.parse(msg.content)}</div>`;
+            }
+        });
+    } else {
+        // 无历史，显示动态欢迎语
+        chatArea.innerHTML = `<div class="chat-ai"><strong>🤖 ${getRoleName(currentRole)}</strong><br>${getWelcomeMessage(currentRole).replace(/\n/g, '<br>')}</div>`;
     }
-    });
+
     chatArea.scrollTop = chatArea.scrollHeight;
 }
 
