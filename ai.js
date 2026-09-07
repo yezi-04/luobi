@@ -369,6 +369,9 @@ async function askAI(selectedText) {
         <div class="chat-ai" id="${msgId}">
             <strong>🤖 ${getRoleName(currentRole)}</strong><br>
             <span class="ai-reasoning" id="${msgId}-reasoning" style="display:none;"></span>
+            <span class="ai-loading" id="${msgId}-loading">
+                <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+            </span>
             <span class="ai-content" id="${msgId}-content"></span>
             <div class="apply-btn-row" id="${msgId}-apply" style="display:none;">
                 <button class="apply-btn" onclick="applyEdit('${msgId}')">📥 应用修改</button>
@@ -414,6 +417,8 @@ async function askAI(selectedText) {
                     if (!delta) continue;
                     if (delta.reasoning_content) {
                         reasoningContent += delta.reasoning_content;
+                        const loadingEl = document.getElementById(`${msgId}-loading`);
+                        if (loadingEl) loadingEl.remove();
                         const reasoningEl = document.getElementById(`${msgId}-reasoning`);
                         if (reasoningEl) {
                             reasoningEl.style.display = 'block';
@@ -422,6 +427,8 @@ async function askAI(selectedText) {
                     }
                     if (delta.content) {
                         fullContent += delta.content;
+                        const loadingEl = document.getElementById(`${msgId}-loading`);
+                        if (loadingEl) loadingEl.remove();
                         const contentEl = document.getElementById(`${msgId}-content`);
                         if (contentEl) {
                             contentEl.textContent = fullContent;
@@ -461,6 +468,8 @@ async function askAI(selectedText) {
         saveSessions();
 
     } catch (error) {
+        const loadingEl = document.getElementById(`${msgId}-loading`);
+        if (loadingEl) loadingEl.remove();
         const contentEl = document.getElementById(`${msgId}-content`);
         if (contentEl) contentEl.innerHTML = `<span class="chat-error">❌ ${error.message}</span>`;
     }
