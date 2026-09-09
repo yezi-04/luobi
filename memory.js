@@ -5,7 +5,7 @@
 
 // ============ 记忆库读取 ============
 function getMemory() { return DataCore.getMemory(); }
-function saveMemory(memory) { DataCore.setMemory(memory); }
+async function saveMemory(memory) { await DataCore.setMemory(memory); }
 
 // ============ 自动提取（定稿后调用） ============
 async function extractToMemory() {
@@ -66,7 +66,7 @@ async function extractToMemory() {
         if (!jsonMatch) return;
 
         const extracted = JSON.parse(jsonMatch[0]);
-        const memory = getMemory();
+        const memory = await getMemory();
 
         // 更新人物状态
         if (extracted.characters) {
@@ -100,7 +100,7 @@ async function extractToMemory() {
             });
         }
 
-        saveMemory(memory);
+        await saveMemory(memory);
         console.log('[Memory] 记忆库已更新', memory);
 
     } catch (e) {
@@ -109,8 +109,8 @@ async function extractToMemory() {
 }
 
 // ============ 注入接口（供 askAI 调用） ============
-function getMemoryContext() {
-    const memory = getMemory();
+async function getMemoryContext() {
+    const memory = await getMemory();
 
     let context = '';
 

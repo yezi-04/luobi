@@ -107,8 +107,6 @@ function getWelcomeMessage(role) {
 
 function getPartnerWelcome() {
     const currentId = DataCore.getCurrentChapterId();
-    const memory = DataCore.getMemory();
-    const openForeshadows = memory.foreshadows?.filter(f => f.status === 'open') || [];
 
     if (!currentId) {
         return '我是你的创作伙伴。先创建一个章节，然后告诉我你想写什么——哪怕只是一个模糊的感觉。';
@@ -119,11 +117,6 @@ function getPartnerWelcome() {
     const progress = getCurrentChapterWordCount();
 
     let msg = `你正在写「${title}」，已经写了 ${progress} 字。`;
-
-    if (openForeshadows.length > 0) {
-        msg += `\n⚠️ 有 ${openForeshadows.length} 个伏笔还没回收：${openForeshadows[0].description}。`;
-    }
-
     return msg + '\n想继续写，还是想聊聊方向？';
 }
 
@@ -170,6 +163,7 @@ function resetCurrentChat() {
 // ============ Tab 切换 ============
 function switchTab(role) {
     currentRole = role;
+    DataCore.setCurrentRole(role);
     const tabMap = { style: 0, plot: 1, review: 2, partner: 3 };
     const allTabs = document.querySelectorAll('.ai-pane .tab');
     allTabs.forEach(t => t.classList.remove('active'));
@@ -334,7 +328,7 @@ async function askAI(selectedText) {
     if (!session) { newSession(); session = getCurrentSession(); }
 
     let systemContent = getRolePrompt(currentRole);
-    const memoryCtx = typeof getMemoryContext === 'function' ? getMemoryContext() : '';
+    const memoryCtx = typeof getMemoryContext === 'function' ? await getMemoryContext() : '';
     if (memoryCtx) {
         systemContent = memoryCtx + '\n---\n' + systemContent;
     }
@@ -1106,8 +1100,8 @@ function toggleSettingsMenu() {
 applySavedFontSizes();
 
 // ============ 记忆库面板 ============
-function renderMemoryPanel() {
-    const memory = DataCore.getMemory();
+async function renderMemoryPanel() {
+    const memory = await DataCore.getMemory();
 
     const charEl = document.getElementById('memoryCharacters');
     if (charEl) {
@@ -1151,32 +1145,32 @@ function renderMemoryPanel() {
     }
 }
 
-function addMemoryCharacter() {
+async function addMemoryCharacter() {
     const name = prompt('请输入人物名称：');
     if (!name || !name.trim()) return;
     const status = prompt('请输入当前状态（如：左臂擦伤、当前位置等）：');
     if (status === null) return;
-    const memory = DataCore.getMemory();
+    const memory = await DataCore.getMemory();
     if (!memory.characters) memory.characters = {};
     memory.characters[name.trim()] = { status: status.trim() };
-    DataCore.setMemory(memory);
-    renderMemoryPanel();
+    await DataCore.setMemory(memory);
+    await renderMemoryPanel();
 }
 
-function deleteMemoryCharacter(name) {
+async function deleteMemoryCharacter(name) {
     if (!confirm(`确定要删除人物「${name}」吗？`)) return;
-    const memory = DataCore.getMemory();
+    const memory = await DataCore.getMemory();
     if (memory.characters) delete memory.characters[name];
-    DataCore.setMemory(memory);
-    renderMemoryPanel();
+    await DataCore.setMemory(memory);
+    await renderMemoryPanel();
 }
 
-function addMemoryForeshadow() {
+async function addMemoryForeshadow() {
     const description = prompt('请输入伏笔描述：');
     if (!description || !description.trim()) return;
     const chapterPlanted = prompt('请输入埋下伏笔的章节名称：');
     if (chapterPlanted === null) return;
-    const memory = DataCore.getMemory();
+    const memory = await DataCore.getMemory();
     if (!memory.foreshadows) memory.foreshadows = [];
     memory.foreshadows.push({
         id: 'fs_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
@@ -1184,22 +1178,24 @@ function addMemoryForeshadow() {
         status: 'open',
         chapterPlanted: chapterPlanted.trim()
     });
-    DataCore.setMemory(memory);
-    renderMemoryPanel();
+    await DataCore.setMemory(memory);
+    await renderMemoryPanel();
 }
 
-function deleteMemoryForeshadow(id) {
+async function deleteMemoryForeshadow(id) {
     if (!confirm('确定要删除这条伏笔记录吗？')) return;
-    const memory = DataCore.getMemory();
+    const memory = await DataCore.getMemory();
     if (memory.foreshadows) {
         memory.foreshadows = memory.foreshadows.filter(f => f.id !== id);
     }
-    DataCore.setMemory(memory);
-    renderMemoryPanel();
+    await DataCore.setMemory(memory);
+    await renderMemoryPanel();
 }
 
 // ============ AI 模块初始化（由 index.html 在 DataCore.init 之后调用） ============
 function initAI() {
+    currentRole = DataCore.getCurrentRole() || 'style';
+    switchTab(currentRole);
     initSessions();
     renderSessionList();
     loadSessionToChat();

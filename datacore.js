@@ -1,11 +1,91 @@
 /*
  * datacore.js — 落笔 统一数据核心
- * 所有模块通过 DataCore 读写数据，禁止直接操作 localStorage
+ * 数据持久化：IndexedDB 优先，localStorage fallback
  * 加载顺序：第一个（在 config.js 之前）
  */
 
 const DataCore = (() => {
     'use strict';
+
+    // ============ IndexedDB 封装 ============
+    const DB_NAME = 'luobi-db';
+    const DB_VERSION = 1;
+    const DB_STORE = 'keyval';
+    let db = null;
+    let useIndexedDB = true;
+
+    function openDB() {
+        return new Promise((resolve, reject) => {
+            if (db) { resolve(db); return; }
+            const request = indexedDB.open(DB_NAME, DB_VERSION);
+
+            request.onupgradeneeded = (e) => {
+                const d = e.target.result;
+                if (!d.objectStoreNames.contains(DB_STORE)) {
+                    d.createObjectStore(DB_STORE);
+                }
+            };
+
+            request.onsuccess = (e) => {
+                db = e.target.result;
+                resolve(db);
+            };
+
+            request.onerror = (e) => {
+                useIndexedDB = false;
+                reject(e);
+            };
+        });
+    }
+
+    async function dbGet(key) {
+        if (!useIndexedDB) return null;
+        try {
+            const d = await openDB();
+            return new Promise((resolve, reject) => {
+                const tx = d.transaction(DB_STORE, 'readonly');
+                const store = tx.objectStore(DB_STORE);
+                const req = store.get(key);
+                req.onsuccess = () => resolve(req.result);
+                req.onerror = reject;
+            });
+        } catch (e) {
+            useIndexedDB = false;
+            return null;
+        }
+    }
+
+    async function dbSet(key, value) {
+        if (!useIndexedDB) return;
+        try {
+            const d = await openDB();
+            return new Promise((resolve, reject) => {
+                const tx = d.transaction(DB_STORE, 'readwrite');
+                const store = tx.objectStore(DB_STORE);
+                store.put(value, key);
+                tx.oncomplete = resolve;
+                tx.onerror = reject;
+            });
+        } catch (e) {
+            useIndexedDB = false;
+        }
+    }
+
+    async function dbDelete(key) {
+        if (!useIndexedDB) return;
+        try {
+            const d = await openDB();
+            return new Promise((resolve, reject) => {
+                const tx = d.transaction(DB_STORE, 'readwrite');
+                const store = tx.objectStore(DB_STORE);
+                store.delete(key);
+                tx.oncomplete = resolve;
+                tx.onerror = reject;
+            });
+        } catch (e) {
+            useIndexedDB = false;
+        }
+    }
 
     // ============ 私有数据 ============
     const _state = {
@@ -26,8 +106,8 @@ const DataCore = (() => {
             deepThink: false,
             editorFontSize: 18,
             chatFontSize: 14,
-            sidebarWidth: 240,     // ★ 新增
-            aiPaneWidth: 340,      // ★ 新增
+            sidebarWidth: 240,
+            aiPaneWidth: 340,
             rightPaneTab: 'ai'
         },
         background: {
@@ -59,60 +139,105 @@ const DataCore = (() => {
         });
     }
 
-    // ============ 持久化 ============
-    function _loadFromStorage() {
-        try {
-            const saved = localStorage.getItem('luobi-datacore');
-            if (saved) {
-                const data = JSON.parse(saved);
-                _state.ui = { ..._state.ui, ...(data.ui || {}) };
-                _state.sessions = data.sessions || {};
-                _state.currentSessionId = data.currentSessionId || {};
-                _state.chapters.toc = data.toc || [];
-                _state.chapters.currentChapterId = data.currentChapterId || null;
-                _state.currentRole = data.currentRole || 'style';   // ★ 修复：恢复当前角色
-                _state.background = data.background || { full: '', summary: '' };
-                _state.finalize = data.finalize || {};
-                _state.apiKey = data.apiKey || '';
-            }
-            const content = localStorage.getItem('luobi-chapters-content');
-            if (content) {
-                try {
-                    _state.chapters.content = JSON.parse(content);
-                } catch (e) {
-                    console.error('[DataCore] 章节内容解析失败，重置为空', e);
-                    _state.chapters.content = {};
+    // ============ 持久化（IndexedDB + localStorage fallback） ============
+
+    async function _loadFromStorage() {
+        let loadedMain = null;
+        let loadedContent = null;
+        let loadedMemory = null;
+
+        if (useIndexedDB) {
+            loadedMain = await dbGet('main');
+            loadedContent = await dbGet('chapters-content');
+            loadedMemory = await dbGet('memory');
+        }
+
+        // 如果 IndexedDB 没有数据，尝试从 localStorage 迁移
+        if (!loadedMain) {
+            const localMain = localStorage.getItem('luobi-datacore');
+            const localContent = localStorage.getItem('luobi-chapters-content');
+            if (localMain) {
+                const legacyMain = JSON.parse(localMain);
+                loadedMain = {
+                    ...legacyMain,
+                    chapters: {
+                        ...(legacyMain.chapters || {}),
+                        toc: legacyMain.chapters?.toc || legacyMain.toc || [],
+                        currentChapterId: legacyMain.chapters?.currentChapterId || legacyMain.currentChapterId || null
+                    }
+                };
+                loadedContent = localContent ? JSON.parse(localContent) : {};
+                // 迁移到 IndexedDB
+                if (useIndexedDB) {
+                    await dbSet('main', loadedMain);
+                    await dbSet('chapters-content', loadedContent);
                 }
-            } else {
-                _state.chapters.content = {};
             }
-        } catch (e) {
-            console.error('[DataCore] 数据加载失败，使用默认值', e);
+        }
+
+        if (!loadedMemory) {
+            const localMemory = localStorage.getItem('luobi-memory');
+            if (localMemory) {
+                loadedMemory = JSON.parse(localMemory);
+                if (useIndexedDB) {
+                    await dbSet('memory', loadedMemory);
+                }
+            }
+        }
+
+        // 把加载的数据填入 _state
+        if (loadedMain) {
+            if (loadedMain.ui) _state.ui = { ..._state.ui, ...loadedMain.ui };
+            if (loadedMain.sessions) _state.sessions = loadedMain.sessions;
+            if (loadedMain.currentSessionId) _state.currentSessionId = loadedMain.currentSessionId;
+            if (loadedMain.chapters && loadedMain.chapters.toc) _state.chapters.toc = loadedMain.chapters.toc;
+            if (loadedMain.chapters && loadedMain.chapters.currentChapterId) _state.chapters.currentChapterId = loadedMain.chapters.currentChapterId;
+            if (loadedMain.currentRole) _state.currentRole = loadedMain.currentRole;
+            if (loadedMain.background) _state.background = loadedMain.background;
+            if (loadedMain.finalize) _state.finalize = loadedMain.finalize;
+            if (loadedMain.apiKey) _state.apiKey = loadedMain.apiKey;
+        }
+
+        if (loadedContent) {
+            _state.chapters.content = loadedContent;
+        } else {
+            _state.chapters.content = {};
         }
     }
 
-    function _saveToStorage() {
-        try {
-            const toSave = {
-                ui: _state.ui,
-                sessions: _state.sessions,
-                currentSessionId: _state.currentSessionId,
-                currentRole: _state.currentRole,   // ★ 新增：持久化当前角色
+    async function _saveToStorage() {
+        const toSave = {
+            ui: _state.ui,
+            sessions: _state.sessions,
+            currentSessionId: _state.currentSessionId,
+            chapters: {
                 toc: _state.chapters.toc,
-                currentChapterId: _state.chapters.currentChapterId,
-                background: _state.background,
-                finalize: _state.finalize,
-                apiKey: _state.apiKey
-            };
+                currentChapterId: _state.chapters.currentChapterId
+            },
+            currentRole: _state.currentRole,
+            background: _state.background,
+            finalize: _state.finalize,
+            apiKey: _state.apiKey
+        };
+
+        if (useIndexedDB) {
+            await dbSet('main', toSave);
+            await dbSet('chapters-content', _state.chapters.content);
+        } else {
+            // fallback
             localStorage.setItem('luobi-datacore', JSON.stringify(toSave));
             localStorage.setItem('luobi-chapters-content', JSON.stringify(_state.chapters.content));
-        } catch (e) {
-            console.error('[DataCore] 数据保存失败', e);
         }
     }
 
-    function init() {
-        _loadFromStorage();
+    async function init() {
+        try {
+            await openDB();
+            await _loadFromStorage();
+        } catch (e) {
+            useIndexedDB = false;
+            await _loadFromStorage();
+        }
         if (typeof ruleConfig !== 'undefined') {
             _state.rules = JSON.parse(JSON.stringify(ruleConfig));
         }
@@ -246,33 +371,33 @@ const DataCore = (() => {
 
     function setCurrentRole(role) {
         _state.currentRole = role;
-        _saveToStorage();   // ★ 新增：切换角色时持久化
+        _saveToStorage();
         emit('role:switched', role);
     }
 
     // ---- 记忆库 ----
-    function getMemory() {
-        try {
-            const saved = localStorage.getItem('luobi-memory');
-            return saved ? JSON.parse(saved) : {
-                characters: {},
-                foreshadows: [],
-                settings: ""
-            };
-        } catch (e) {
-            return { characters: {}, foreshadows: [], settings: "" };
+    async function getMemory() {
+        if (useIndexedDB) {
+            const mem = await dbGet('memory');
+            if (mem) return mem;
         }
+        const localMem = localStorage.getItem('luobi-memory');
+        return localMem ? JSON.parse(localMem) : { characters: {}, foreshadows: [], settings: "" };
     }
 
-    function setMemory(memory) {
-        localStorage.setItem('luobi-memory', JSON.stringify(memory));
+    async function setMemory(memory) {
+        if (useIndexedDB) {
+            await dbSet('memory', memory);
+        } else {
+            localStorage.setItem('luobi-memory', JSON.stringify(memory));
+        }
         emit('memory:updated', memory);
     }
 
-    function updateMemory(updates) {
-        const memory = getMemory();
+    async function updateMemory(updates) {
+        const memory = await getMemory();
         Object.assign(memory, updates);
-        setMemory(memory);
+        await setMemory(memory);
     }
 
     // ============ 公开接口 ============

@@ -248,11 +248,13 @@
 <script src="ai.js"></script>
 <script>
     // 立即执行初始化，确保渲染前完成所有状态恢复，消除闪烁
-    DataCore.init();
-    if (typeof initApiKeyField === 'function') initApiKeyField();
-    initUI();
-    initChapters();
-    if (typeof initAI === 'function') initAI();
+    (async function() {
+        await DataCore.init();
+        if (typeof initApiKeyField === 'function') initApiKeyField();
+        initUI();
+        initChapters();
+        if (typeof initAI === 'function') initAI();
+    })();
 </script>
 
 <!-- 移动端组件 -->
