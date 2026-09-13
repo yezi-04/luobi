@@ -541,3 +541,30 @@ function initChapters() {
     initDragSort();
     initAutoSave();
 }
+/**
+ * 将目录树展平为线性章节列表
+ * @param {Array} toc - DataCore.getToc() 返回的目录树
+ * @returns {Array} [{ id, title, type: 'chapter', index }]
+ *   index 从 0 开始，按目录树顺序递增
+ */
+function flattenChapters(toc) {
+    const result = [];
+
+    function walk(nodes) {
+        nodes.forEach(node => {
+            if (node.type === 'chapter') {
+                result.push({
+                    id: node.id,
+                    title: node.title,
+                    type: 'chapter',
+                    index: result.length
+                });
+            } else if (node.type === 'volume' && node.children) {
+                walk(node.children);
+            }
+        });
+    }
+
+    walk(toc || []);
+    return result;
+}

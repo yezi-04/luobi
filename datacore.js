@@ -139,6 +139,160 @@ const DataCore = (() => {
         });
     }
 
+    // ============ 记忆库 v2 迁移 ============
+
+/**
+ * 生成角色 ID，若冲突则追加 _2 / _3
+ */
+function generateCharId(name, existingProfiles) {
+    const base = 'char_' + name.replace(/[^\u4e00-\u9fff\w]/g, '');
+    let id = base;
+    let counter = 2;
+    while (existingProfiles[id]) {
+        id = base + '_' + counter;
+        counter++;
+    }
+    return id;
+}
+
+/**
+ * 迁移旧记忆库到 v2 结构
+ * @param {Object|null} oldMemory - 旧结构，null 表示无数据
+ * @returns {Object} v2 结构
+ */
+function migrateMemoryToV2(oldMemory) {
+    if (oldMemory && oldMemory.version === 2) {
+        return oldMemory;
+    }
+
+    const newMemory = {
+        version: 2,
+        anchor: {
+            currentChapterId: null,
+            currentChapterGoal: '',
+            involvedCharacterIds: [],
+            involvedLocationIds: []
+        },
+        activeStates: {},
+        openForeshadows: [],
+        characterProfiles: {},
+        locations: {},
+        foreshadowDetails: {},
+        chapterArchives: {},
+        historicalChapterArchives: {},
+        userWritingHabits: {
+            commonWords: [],
+            techniques: [],
+            editPreferences: [],
+            pacing: ''
+        },
+        globalSummary: '',
+        entityIndex: {}
+    };
+
+    if (!oldMemory) return newMemory;
+
+    // ===== 迁移角色 =====
+    if (oldMemory.characters && typeof oldMemory.characters === 'object') {
+        Object.entries(oldMemory.characters).forEach(([name, info]) => {
+            const charId = generateCharId(name, newMemory.characterProfiles);
+            // 状态与档案分离，状态迁移到 characterProfiles 的初始备份
+            newMemory.characterProfiles[charId] = {
+                name: name,
+                aliases: [],
+                personality: '',
+                motivation: '',
+                relationships: [],
+                arc: '',
+                initialStatus: info.status || '',
+                initialPosition: info.position || ''
+            };
+            // activeStates 不迁移（由当前章节决定）
+        });
+    }
+
+    // ===== 迁移伏笔 =====
+    if (oldMemory.foreshadows && Array.isArray(oldMemory.foreshadows)) {
+        oldMemory.foreshadows.forEach(f => {
+            const fsId = f.id || ('fs_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6));
+            const title = f.description ? f.description.substring(0, 20) : '未命名伏笔';
+
+            // 状态映射：保留 hinted
+            const statusMap = {
+                'open': 'planted',
+                'hinted': 'hinted',
+                'resolved': 'resolved',
+                'abandoned': 'abandoned'
+            };
+            const mappedStatus = statusMap[f.status] || 'planted';
+
+            // 完整信息
+            newMemory.foreshadowDetails[fsId] = {
+                id: fsId,
+                title: title,
+                fullDescription: f.description || '',
+                status: mappedStatus,
+                layer: 'sub',
+                plantedChapter: f.chapterPlanted || '',
+                plantedChapterId: null,
+                plannedResolution: '',
+                plannedResolutionChapterId: null,
+                resolvedChapter: f.chapterResolved || null,
+                resolvedChapterId: null,
+                relatedCharacterIds: [],
+                preconditions: []
+            };
+        });
+    }
+
+    // ===== 生成实体索引 =====
+    rebuildEntityIndex(newMemory);
+
+    return newMemory;
+}
+
+/**
+ * 重建实体索引表
+ * key 用 "type:id" 唯一，value 存 name 和 aliases 供匹配
+ */
+function rebuildEntityIndex(memory) {
+    const index = {};
+
+    // 角色
+    Object.entries(memory.characterProfiles).forEach(([id, profile]) => {
+        if (!profile.name) return;
+        index[`character:${id}`] = {
+            id: id,
+            type: 'character',
+            name: profile.name,
+            aliases: profile.aliases || []
+        };
+    });
+
+    // 地点
+    Object.entries(memory.locations).forEach(([id, loc]) => {
+        if (!loc.name) return;
+        index[`location:${id}`] = {
+            id: id,
+            type: 'location',
+            name: loc.name,
+            aliases: loc.aliases || []
+        };
+    });
+
+    // 伏笔（用 ID 做 key，name 用 title 供匹配）
+    Object.entries(memory.foreshadowDetails).forEach(([id, fs]) => {
+        if (!fs.title) return;
+        index[`foreshadow:${id}`] = {
+            id: id,
+            type: 'foreshadow',
+            name: fs.title,
+            aliases: []
+        };
+    });
+
+    memory.entityIndex = index;
+}
     // ============ 持久化（IndexedDB + localStorage fallback） ============
 
     async function _loadFromStorage() {
@@ -175,15 +329,26 @@ const DataCore = (() => {
             }
         }
 
-        if (!loadedMemory) {
-            const localMemory = localStorage.getItem('luobi-memory');
-            if (localMemory) {
-                loadedMemory = JSON.parse(localMemory);
+            if (!loadedMemory) {
+                const localMemory = localStorage.getItem('luobi-memory');
+                if (localMemory) {
+                    loadedMemory = JSON.parse(localMemory);
+                }
+            }
+
+            // 迁移记忆库到 v2
+            if (loadedMemory && loadedMemory.version !== 2) {
+                loadedMemory = migrateMemoryToV2(loadedMemory);
+                if (useIndexedDB) {
+                    await dbSet('memory', loadedMemory);
+                }
+            } else if (!loadedMemory) {
+                // 无任何旧数据，创建空的 v2 结构
+                loadedMemory = migrateMemoryToV2(null);
                 if (useIndexedDB) {
                     await dbSet('memory', loadedMemory);
                 }
             }
-        }
 
         // 把加载的数据填入 _state
         if (loadedMain) {

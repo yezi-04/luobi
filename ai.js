@@ -328,9 +328,14 @@ async function askAI(selectedText) {
     if (!session) { newSession(); session = getCurrentSession(); }
 
     let systemContent = getRolePrompt(currentRole);
-    const memoryCtx = typeof getMemoryContext === 'function' ? await getMemoryContext() : '';
-    if (memoryCtx) {
-        systemContent = memoryCtx + '\n---\n' + systemContent;
+    let memoryHint = '';
+
+    if (typeof getMemoryContext === 'function') {
+        const memResult = await getMemoryContext(userInput);
+        if (memResult.context) {
+            systemContent = memResult.context + '\n---\n' + systemContent;
+        }
+        memoryHint = memResult.hint || '';
     }
 
     const bg = getBackground();
@@ -450,6 +455,12 @@ async function askAI(selectedText) {
 
         const applyRow = document.getElementById(`${msgId}-apply`);
         if (applyRow) applyRow.style.display = '';
+
+        // 追加记忆库提示
+        if (memoryHint) {
+            chatArea.innerHTML += `<div class="chat-system">${memoryHint}</div>`;
+            chatArea.scrollTop = chatArea.scrollHeight;
+        }
 
         session.history.push(
             { role: "user", content: userInput },
