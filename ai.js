@@ -1111,45 +1111,68 @@ function toggleSettingsMenu() {
 applySavedFontSizes();
 
 // ============ 记忆库面板 ============
+// ============ 记忆库面板 ============
+
+/**
+ * 生成唯一角色 ID，处理同名冲突
+ */
+function generateUniqueCharId(name, profiles) {
+    const base = 'char_' + name.replace(/[^\u4e00-\u9fff\w]/g, '');
+    if (!profiles[base]) return base;
+    let i = 2;
+    while (profiles[`${base}_${i}`]) i++;
+    return `${base}_${i}`;
+}
+
 async function renderMemoryPanel() {
     const memory = await DataCore.getMemory();
 
+    // ===== 人物状态 =====
     const charEl = document.getElementById('memoryCharacters');
     if (charEl) {
-        const chars = memory.characters || {};
-        const charKeys = Object.keys(chars);
-        if (charKeys.length === 0) {
+        const profiles = memory.characterProfiles || {};
+        const ids = Object.keys(profiles);
+        if (ids.length === 0) {
             charEl.innerHTML = '<p class="memory-empty">暂无人物状态</p>';
         } else {
-            charEl.innerHTML = charKeys.map(name => {
-                const info = chars[name];
+            charEl.innerHTML = ids.map(id => {
+                const p = profiles[id];
+                const s = memory.activeStates[id] || {};
+                const info = [s.status, s.position].filter(Boolean).join(' · ') || '状态未填写';
+                const aliases = (p.aliases && p.aliases.length > 0) ? `（${p.aliases.join('、')}）` : '';
                 return `<div class="memory-item">
                     <div class="memory-item-header">
-                        <strong>${name}</strong>
-                        <button class="icon-btn memory-delete-btn" onclick="deleteMemoryCharacter('${name}')">×</button>
+                        <strong>${p.name}${aliases}</strong>
+                        <button class="icon-btn memory-delete-btn" onclick="deleteMemoryCharacter('${id}')">×</button>
                     </div>
-                    <div class="memory-item-body">${JSON.stringify(info)}</div>
+                    <div class="memory-item-body">${info}</div>
                 </div>`;
             }).join('');
         }
     }
 
+    // ===== 伏笔追踪 =====
     const foreEl = document.getElementById('memoryForeshadows');
     if (foreEl) {
-        const foreshadows = memory.foreshadows || [];
-        if (foreshadows.length === 0) {
+        const details = memory.foreshadowDetails || {};
+        const ids = Object.keys(details);
+        if (ids.length === 0) {
             foreEl.innerHTML = '<p class="memory-empty">暂无伏笔记录</p>';
         } else {
-            foreEl.innerHTML = foreshadows.map(f => {
-                const statusIcon = f.status === 'open' ? '🔴' : '✅';
-                const statusText = f.status === 'open' ? '未回收' : '已回收';
+            foreEl.innerHTML = ids.map(id => {
+                const fs = details[id];
+                const statusIcon = (fs.status === 'planted') ? '🔴'
+                                 : (fs.status === 'hinted') ? '🟡'
+                                 : (fs.status === 'resolved') ? '✅' : '⚪';
+                const statusText = { 'planted': '未回收', 'hinted': '即将回收', 'resolved': '已回收', 'abandoned': '已废弃' }[fs.status] || fs.status;
+                const layerText = { 'main': '主线', 'sub': '支线', 'easter': '彩蛋' }[fs.layer] || fs.layer;
                 return `<div class="memory-item">
                     <div class="memory-item-header">
-                        <span>${statusIcon} ${statusText}</span>
-                        <button class="icon-btn memory-delete-btn" onclick="deleteMemoryForeshadow('${f.id}')">×</button>
+                        <span>${statusIcon} [${layerText}] ${fs.title}</span>
+                        <button class="icon-btn memory-delete-btn" onclick="deleteMemoryForeshadow('${id}')">×</button>
                     </div>
-                    <div class="memory-item-body">${f.description}</div>
-                    <div class="memory-item-footer">埋于：${f.chapterPlanted || '未知'}${f.chapterResolved ? ' | 回收于：' + f.chapterResolved : ''}</div>
+                    <div class="memory-item-body">${fs.fullDescription}</div>
+                    <div class="memory-item-footer">埋于：${fs.plantedChapter || '未知'} · ${statusText}</div>
                 </div>`;
             }).join('');
         }
@@ -1159,46 +1182,104 @@ async function renderMemoryPanel() {
 async function addMemoryCharacter() {
     const name = prompt('请输入人物名称：');
     if (!name || !name.trim()) return;
-    const status = prompt('请输入当前状态（如：左臂擦伤、当前位置等）：');
+
+    const aliasesInput = prompt('请输入别名（多个用逗号分隔，可留空）：');
+    const status = prompt('请输入当前状态（如：左臂擦伤）：');
     if (status === null) return;
+    const position = prompt('请输入当前位置（可留空）：');
+    if (position === null) return;
+
     const memory = await DataCore.getMemory();
-    if (!memory.characters) memory.characters = {};
-    memory.characters[name.trim()] = { status: status.trim() };
+    const charId = generateUniqueCharId(name.trim(), memory.characterProfiles || {});
+
+    memory.characterProfiles[charId] = {
+        name: name.trim(),
+        aliases: aliasesInput ? aliasesInput.split(/[,，]/).map(s => s.trim()).filter(Boolean) : [],
+        personality: '',
+        motivation: '',
+        relationships: [],
+        arc: ''
+    };
+
+    memory.activeStates[charId] = {
+        status: status.trim(),
+        position: position.trim()
+    };
+
+    rebuildEntityIndex(memory);
     await DataCore.setMemory(memory);
     await renderMemoryPanel();
 }
 
-async function deleteMemoryCharacter(name) {
-    if (!confirm(`确定要删除人物「${name}」吗？`)) return;
+async function deleteMemoryCharacter(charId) {
     const memory = await DataCore.getMemory();
-    if (memory.characters) delete memory.characters[name];
+    const charName = memory.characterProfiles[charId]?.name || charId;
+    if (!confirm(`确定要删除角色「${charName}」吗？`)) return;
+
+    // 1. 删除档案和状态
+    delete memory.characterProfiles[charId];
+    delete memory.activeStates[charId];
+
+    // 2. 清理 anchor 引用
+    memory.anchor.involvedCharacterIds = (memory.anchor.involvedCharacterIds || [])
+        .filter(id => id !== charId);
+
+    // 3. 清理其他角色的 relationships
+    Object.values(memory.characterProfiles).forEach(p => {
+        p.relationships = (p.relationships || []).filter(r => r.target !== charId);
+    });
+
+    // 4. 重建索引
+    rebuildEntityIndex(memory);
     await DataCore.setMemory(memory);
     await renderMemoryPanel();
 }
 
 async function addMemoryForeshadow() {
+    const title = prompt('请输入伏笔标题（简短，可留空）：');
+    if (title === null) return;
+
     const description = prompt('请输入伏笔描述：');
     if (!description || !description.trim()) return;
+
     const chapterPlanted = prompt('请输入埋下伏笔的章节名称：');
     if (chapterPlanted === null) return;
+
+    const layerInput = prompt('请输入伏笔层级：main（主线）/ sub（支线）/ easter（彩蛋）：', 'sub');
+    const layer = ['main', 'sub', 'easter'].includes(layerInput) ? layerInput : 'sub';
+
     const memory = await DataCore.getMemory();
-    if (!memory.foreshadows) memory.foreshadows = [];
-    memory.foreshadows.push({
-        id: 'fs_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
-        description: description.trim(),
-        status: 'open',
-        chapterPlanted: chapterPlanted.trim()
-    });
+    const fsId = 'fs_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+    const finalTitle = (title && title.trim()) || description.trim().substring(0, 20);
+
+    memory.foreshadowDetails[fsId] = {
+        id: fsId,
+        title: finalTitle,
+        fullDescription: description.trim(),
+        status: 'planted',
+        layer: layer,
+        plantedChapter: chapterPlanted.trim(),
+        plantedChapterId: null,
+        plannedResolution: '',
+        plannedResolutionChapterId: null,
+        resolvedChapter: null,
+        resolvedChapterId: null,
+        relatedCharacterIds: [],
+        preconditions: []
+    };
+
+    rebuildEntityIndex(memory);
     await DataCore.setMemory(memory);
     await renderMemoryPanel();
 }
 
-async function deleteMemoryForeshadow(id) {
-    if (!confirm('确定要删除这条伏笔记录吗？')) return;
+async function deleteMemoryForeshadow(fsId) {
     const memory = await DataCore.getMemory();
-    if (memory.foreshadows) {
-        memory.foreshadows = memory.foreshadows.filter(f => f.id !== id);
-    }
+    const fsTitle = memory.foreshadowDetails[fsId]?.title || fsId;
+    if (!confirm(`确定要删除伏笔「${fsTitle}」吗？`)) return;
+
+    delete memory.foreshadowDetails[fsId];
+    rebuildEntityIndex(memory);
     await DataCore.setMemory(memory);
     await renderMemoryPanel();
 }
