@@ -1206,7 +1206,7 @@ async function addMemoryCharacter() {
         position: position.trim()
     };
 
-    rebuildEntityIndex(memory);
+    DataCore.rebuildEntityIndex(memory);
     await DataCore.setMemory(memory);
     await renderMemoryPanel();
 }
@@ -1230,7 +1230,7 @@ async function deleteMemoryCharacter(charId) {
     });
 
     // 4. 重建索引
-    rebuildEntityIndex(memory);
+     DataCore.rebuildEntityIndex(memory);
     await DataCore.setMemory(memory);
     await renderMemoryPanel();
 }
@@ -1268,7 +1268,7 @@ async function addMemoryForeshadow() {
         preconditions: []
     };
 
-    rebuildEntityIndex(memory);
+    DataCore.rebuildEntityIndex(memory);
     await DataCore.setMemory(memory);
     await renderMemoryPanel();
 }
@@ -1279,7 +1279,7 @@ async function deleteMemoryForeshadow(fsId) {
     if (!confirm(`确定要删除伏笔「${fsTitle}」吗？`)) return;
 
     delete memory.foreshadowDetails[fsId];
-    rebuildEntityIndex(memory);
+    DataCore.rebuildEntityIndex(memory);
     await DataCore.setMemory(memory);
     await renderMemoryPanel();
 }

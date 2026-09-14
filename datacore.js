@@ -256,10 +256,11 @@ function migrateMemoryToV2(oldMemory) {
  * key 用 "type:id" 唯一，value 存 name 和 aliases 供匹配
  */
 function rebuildEntityIndex(memory) {
+    if (!memory) return;
     const index = {};
 
     // 角色
-    Object.entries(memory.characterProfiles).forEach(([id, profile]) => {
+    Object.entries(memory.characterProfiles || {}).forEach(([id, profile]) => {
         if (!profile.name) return;
         index[`character:${id}`] = {
             id: id,
@@ -270,7 +271,7 @@ function rebuildEntityIndex(memory) {
     });
 
     // 地点
-    Object.entries(memory.locations).forEach(([id, loc]) => {
+    Object.entries(memory.locations || {}).forEach(([id, loc]) => {
         if (!loc.name) return;
         index[`location:${id}`] = {
             id: id,
@@ -281,7 +282,7 @@ function rebuildEntityIndex(memory) {
     });
 
     // 伏笔（用 ID 做 key，name 用 title 供匹配）
-    Object.entries(memory.foreshadowDetails).forEach(([id, fs]) => {
+    Object.entries(memory.foreshadowDetails || {}).forEach(([id, fs]) => {
         if (!fs.title) return;
         index[`foreshadow:${id}`] = {
             id: id,
@@ -547,7 +548,11 @@ function rebuildEntityIndex(memory) {
             if (mem) return mem;
         }
         const localMem = localStorage.getItem('luobi-memory');
-        return localMem ? JSON.parse(localMem) : { characters: {}, foreshadows: [], settings: "" };
+        if (localMem) {
+            const parsed = JSON.parse(localMem);
+            return parsed.version === 2 ? parsed : migrateMemoryToV2(parsed);
+        }
+        return migrateMemoryToV2(null);
     }
 
     async function setMemory(memory) {
@@ -607,6 +612,8 @@ function rebuildEntityIndex(memory) {
 
         getMemory,
         setMemory,
-        updateMemory
+        updateMemory,
+
+        rebuildEntityIndex
     };
 })();

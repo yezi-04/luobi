@@ -7,50 +7,6 @@
 function getMemory() { return DataCore.getMemory(); }
 async function saveMemory(memory) { await DataCore.setMemory(memory); }
 
-// ============ 实体索引重建 ============
-/**
- * 重建实体索引表
- * key 用 "type:id" 唯一，value 存 name 和 aliases 供匹配
- */
-function rebuildEntityIndex(memory) {
-    const index = {};
-
-    // 角色
-    Object.entries(memory.characterProfiles || {}).forEach(([id, profile]) => {
-        if (!profile.name) return;
-        index[`character:${id}`] = {
-            id: id,
-            type: 'character',
-            name: profile.name,
-            aliases: profile.aliases || []
-        };
-    });
-
-    // 地点
-    Object.entries(memory.locations || {}).forEach(([id, loc]) => {
-        if (!loc.name) return;
-        index[`location:${id}`] = {
-            id: id,
-            type: 'location',
-            name: loc.name,
-            aliases: loc.aliases || []
-        };
-    });
-
-    // 伏笔
-    Object.entries(memory.foreshadowDetails || {}).forEach(([id, fs]) => {
-        if (!fs.title) return;
-        index[`foreshadow:${id}`] = {
-            id: id,
-            type: 'foreshadow',
-            name: fs.title,
-            aliases: []
-        };
-    });
-
-    memory.entityIndex = index;
-}
-
 // ============ 章节基线 ============
 /**
  * 获取当前写作基线章节索引
@@ -583,7 +539,7 @@ async function extractToMemory() {
         }
 
         // 重建实体索引
-        rebuildEntityIndex(memory);
+        DataCore.rebuildEntityIndex(memory);
 
         await saveMemory(memory);
         console.log('[Memory] 记忆库已更新', memory);
