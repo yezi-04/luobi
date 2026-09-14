@@ -298,6 +298,22 @@ async function startRoundTwoInternal(content) {
 
         chapterHighlights = result.highlights.slice();
         finalizeState = 'round2';
+
+        // 默认全选写入记忆库，保证「一键全部」也能归档
+        memory.chapterArchives = memory.chapterArchives || {};
+        if (!memory.chapterArchives[chapterId]) {
+            memory.chapterArchives[chapterId] = {
+                goal: '',
+                involvedCharacterIds: [],
+                involvedLocationIds: [],
+                highlights: [],
+                notes: '',
+                tone: ''
+            };
+        }
+        memory.chapterArchives[chapterId].highlights = result.highlights.slice();
+        await DataCore.setMemory(memory);
+
         finalize();
     } catch (e) {
         box.innerHTML = `<span style="color:#c0392b;">亮点提取失败：${escapeHTML(e.message)}</span>`;
@@ -353,7 +369,7 @@ async function confirmHighlights() {
     chapterHighlights = [];
 
     alert(`已写入 ${selected.length} 条亮点。`);
-    finalizeState = 'round1done';
+    finalizeState = 'round2';
     updateFinalizeUI();
     saveFinalizeData();
 }
@@ -395,14 +411,54 @@ async function finalizeChapter() {
 
 async function finalizeChapterInternal() {
     if (!confirm('确定将此章节标记为定稿吗？')) return;
-    finalizeState = 'finalized';
+
+    const chapterId = DataCore.getCurrentChapterId();
+    if (!chapterId) { alert('未找到当前章节'); return; }
+
     const editor = document.getElementById('editor');
+    const content = editor?.value || '';
+
+    // ===== 记忆库处理：成功后再锁定状态 =====
+    const memory = await DataCore.getMemory();
+
+    // archive 来源：当前层优先，缺失时回退历史层（用于摘要更新）
+    let archive = memory.chapterArchives?.[chapterId];
+    if (!archive && memory.historicalChapterArchives?.[chapterId]) {
+        archive = memory.historicalChapterArchives[chapterId];
+    }
+
+    // 更新摘要（两种场景都执行）
+    if (archive && content.trim()) {
+        try {
+            const newSummary = await updateGlobalSummary(memory, chapterId, archive, content);
+            if (newSummary) memory.globalSummary = newSummary;
+        } catch (e) {
+            showToast('全局摘要更新失败，不影响定稿', 'info');
+            console.warn('globalSummary update failed:', e);
+        }
+    }
+
+    // 迁移档案（仅当当前层有档案时执行）
+    if (memory.chapterArchives?.[chapterId]) {
+        archiveChapter(memory, chapterId, memory.chapterArchives[chapterId]);
+    }
+
+    try {
+        await DataCore.setMemory(memory);
+    } catch (e) {
+        alert('保存记忆库失败，章节未定稿');
+        console.error('setMemory failed:', e);
+        return;
+    }
+
+    // ===== 写入成功，锁定状态 =====
+    finalizeState = 'finalized';
     if (editor) editor.readOnly = true;
     updateFinalizeUI();
     saveFinalizeData();
     if (typeof renderToc === 'function') renderToc();
     updateFinalizeChapterBadge();
-    alert('✅ 本章已定稿。报告已保存至下方列表。');
+    alert('✅ 本章已定稿。');
 }
 
 function cancelFinalize() {

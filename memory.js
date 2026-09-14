@@ -660,3 +660,93 @@ async function extractHighlights(chapterContent) {
         return { highlights: [], raw: null, error: e.message };
     }
 }
+/**
+ * 归档章节：将档案从当前层迁移到历史层
+ * 支持字段合并：新档案有值的字段覆盖，空字段回退旧值
+ */
+function archiveChapter(memory, chapterId, archive) {
+    if (!archive) return;
+    memory.historicalChapterArchives = memory.historicalChapterArchives || {};
+    const oldArchive = memory.historicalChapterArchives[chapterId] || {};
+
+    memory.historicalChapterArchives[chapterId] = {
+        goal: archive.goal || oldArchive.goal || '',
+        involvedCharacterIds: (archive.involvedCharacterIds && archive.involvedCharacterIds.length > 0)
+            ? [...archive.involvedCharacterIds]
+            : (oldArchive.involvedCharacterIds || []),
+        involvedLocationIds: (archive.involvedLocationIds && archive.involvedLocationIds.length > 0)
+            ? [...archive.involvedLocationIds]
+            : (oldArchive.involvedLocationIds || []),
+        highlights: (archive.highlights && archive.highlights.length > 0)
+            ? [...archive.highlights]
+            : (oldArchive.highlights || []),
+        notes: archive.notes || oldArchive.notes || '',
+        tone: archive.tone || oldArchive.tone || '',
+        archivedAt: Date.now()
+    };
+
+    if (memory.chapterArchives) {
+        delete memory.chapterArchives[chapterId];
+    }
+}
+
+/**
+ * 更新全局摘要
+ * @returns {Promise<string|null>} 新摘要字符串；无需更新时返回 null；更新失败时抛错
+ */
+async function updateGlobalSummary(memory, chapterId, archive, content) {
+    const apiKey = DataCore.getApiKey();
+    if (!apiKey) return null;
+    if (!content || !content.trim()) return null;
+
+    const chapterOrder = flattenChapters(DataCore.getToc());
+    const chapterNode = chapterOrder.find(c => c.id === chapterId);
+    const chapterTitle = chapterNode ? chapterNode.title : '未知章节';
+    const currentSummary = memory.globalSummary || '';
+
+    const prompt = `你是长篇小说的摘要员。以下是这本书的当前全局摘要，和刚定稿的一章。
+
+请更新全局摘要，融入新章节的关键进展。
+
+要求：
+- 保留原有摘要中仍然有效的信息
+- 融入新章节的关键事件、人物状态变化、未回收伏笔
+- 控制在 500 字以内
+- 不编造未出现的情节
+
+当前全局摘要：
+${currentSummary || '（暂无）'}
+
+刚定稿章节：
+标题：${chapterTitle}
+目标：${archive.goal || '未填写'}
+亮点：${(archive.highlights || []).join(' / ') || '无'}
+正文：${content.substring(0, 3000)}
+
+请直接输出更新后的全局摘要，不要任何解释。`;
+
+    const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+            model: 'deepseek-chat',
+            messages: [{ role: 'user', content: prompt }],
+            stream: false,
+            max_tokens: 800,
+            temperature: 0.3
+        })
+    });
+
+    if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error?.message || `HTTP ${response.status}`);
+    }
+
+    const data = await response.json();
+    const summary = data.choices?.[0]?.message?.content?.trim();
+    if (!summary) throw new Error('摘要返回为空');
+    return summary;
+}
