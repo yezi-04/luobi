@@ -217,33 +217,92 @@ async function startRoundTwo() {
 }
 
 async function startRoundTwoInternal(content) {
-    if (!content.trim()) return alert('请先完成章节内容');
-
     const box = document.getElementById('round2Box');
+
+    // 统一收尾函数
+    const finalize = () => {
+        updateFinalizeUI();
+        saveFinalizeData();
+    };
+
+    if (!content.trim()) {
+        alert('请先完成章节内容');
+        return;
+    }
+
+    const chapterId = DataCore.getCurrentChapterId();
+    if (!chapterId) {
+        box.style.display = 'block';
+        box.innerHTML = '<p>未找到当前章节，无法提取亮点。</p>';
+        return;
+    }
+
     box.style.display = 'block';
     box.innerHTML = '⏳ 正在收集亮点反馈...';
 
-    try {
-        const results = await Promise.all(reviewRoles.map(role =>
-            callFinalizeAI([
-                { role: 'system', content: getRoundTwoPrompt(role) },
-                { role: 'user', content }
-            ]).then(text => ({ role, text }))
-        ));
-
-        let html = '';
-        results.forEach(({ role, text }) => {
-            html += `<div class="feedback-item"><b>${getRoleName(role)}</b>: ${marked.parse(text)}</div>`;
-        });
-        html += `<textarea class="hard-injury-input" id="highlightInput" placeholder="请输入本章绝对不能修改的亮点（一行一条）">${chapterHighlights.join('\n')}</textarea>`;
-        html += '<button onclick="confirmHighlights()">🔒 锁定亮点</button>';
-        box.innerHTML = html;
-        finalizeState = 'round2';
-    } catch (e) {
-        box.innerHTML = `<span style="color:#c0392b;">反馈收集失败：${e.message}</span>`;
+    // 覆盖确认
+    const memory = await DataCore.getMemory();
+    const existing = memory.chapterArchives?.[chapterId]?.highlights || [];
+    if (existing.length > 0) {
+        if (!confirm(`本章已有 ${existing.length} 条亮点，重新提取将覆盖。是否继续？`)) {
+            box.innerHTML = '<p>已取消提取。</p>';
+            finalize();
+            return;
+        }
     }
-    updateFinalizeUI();
-    saveFinalizeData();
+
+    try {
+        const result = await extractHighlights(content);
+
+        // 异常路径
+        if (result.error) {
+            box.innerHTML = `<span style="color:#c0392b;">亮点提取失败：${escapeHTML(result.error)}</span>`;
+            finalize();
+            return;
+        }
+
+        // 降级路径：AI 返回非 JSON
+        if (result.raw) {
+            box.innerHTML = `
+                <p>AI 未能提取结构化亮点。以下是原始返回：</p>
+                <textarea id="highlightFallback" class="hard-injury-input">${escapeHTML(result.raw)}</textarea>
+                <button onclick="parseManualHighlights()">解析为亮点</button>
+            `;
+            finalizeState = 'round2';
+            finalize();
+            return;
+        }
+
+        // 空结果路径
+        if (result.highlights.length === 0) {
+            box.innerHTML = '<p>AI 未提取到亮点。可能是本章暂无明显亮点，或提取服务异常。</p>';
+            finalizeState = 'round2';
+            finalize();
+            return;
+        }
+
+        // 正常路径：展示勾选面板
+        let html = '<p>读者审阅员提取到以下亮点，请确认：</p>';
+        html += '<div class="highlight-list">';
+        result.highlights.forEach((h, i) => {
+            html += `
+                <label class="highlight-item">
+                    <input type="checkbox" class="highlight-checkbox" data-index="${i}" checked>
+                    <span>${escapeHTML(h)}</span>
+                </label>
+            `;
+        });
+        html += '</div>';
+        html += '<button onclick="confirmHighlights()" style="margin-top:8px;">✅ 确认写入本章亮点</button>';
+        box.innerHTML = html;
+
+        chapterHighlights = result.highlights.slice();
+        finalizeState = 'round2';
+        finalize();
+    } catch (e) {
+        box.innerHTML = `<span style="color:#c0392b;">亮点提取失败：${escapeHTML(e.message)}</span>`;
+        finalize();
+    }
 }
 
 function getRoundTwoPrompt(role) {
@@ -252,12 +311,81 @@ function getRoundTwoPrompt(role) {
     return '';
 }
 
-function confirmHighlights() {
-    const input = document.getElementById('highlightInput');
-    if (!input) return;
-    chapterHighlights = input.value.split('\n').filter(l => l.trim());
+async function confirmHighlights() {
+    const chapterId = DataCore.getCurrentChapterId();
+    if (!chapterId) {
+        alert('未找到当前章节。');
+        return;
+    }
+
+    // 收集勾选状态
+    const checkboxes = document.querySelectorAll('.highlight-checkbox');
+    const selected = [];
+    checkboxes.forEach(cb => {
+        if (cb.checked) {
+            const idx = parseInt(cb.dataset.index);
+            if (chapterHighlights[idx]) selected.push(chapterHighlights[idx]);
+        }
+    });
+
+    if (selected.length === 0) {
+        alert('请至少勾选一条亮点。');
+        return;
+    }
+
+    // 写入记忆库
+    const memory = await DataCore.getMemory();
+    memory.chapterArchives = memory.chapterArchives || {};
+    if (!memory.chapterArchives[chapterId]) {
+        memory.chapterArchives[chapterId] = {
+            goal: '',
+            involvedCharacterIds: [],
+            involvedLocationIds: [],
+            highlights: [],
+            notes: '',
+            tone: ''
+        };
+    }
+    memory.chapterArchives[chapterId].highlights = selected;
+    await DataCore.setMemory(memory);
+
+    // 清空临时变量
+    chapterHighlights = [];
+
+    alert(`已写入 ${selected.length} 条亮点。`);
+    finalizeState = 'round1done';
+    updateFinalizeUI();
     saveFinalizeData();
-    alert(`已锁定 ${chapterHighlights.length} 个亮点。点击"📌 标记为定稿"完成本章。`);
+}
+
+/**
+ * 降级路径：解析用户手动粘贴的文本为亮点
+ */
+async function parseManualHighlights() {
+    const textarea = document.getElementById('highlightFallback');
+    if (!textarea) return;
+    const lines = textarea.value.split('\n').map(l => l.trim()).filter(Boolean);
+    if (lines.length === 0) {
+        alert('请先粘贴或输入亮点。');
+        return;
+    }
+    chapterHighlights = lines;
+
+    // 重新展示勾选面板
+    const box = document.getElementById('round2Box');
+    let html = '<p>以下是从文本解析出的亮点，请确认：</p>';
+    html += '<div class="highlight-list">';
+    lines.forEach((h, i) => {
+        html += `
+            <label class="highlight-item">
+                <input type="checkbox" class="highlight-checkbox" data-index="${i}" checked>
+                <span>${escapeHTML(h)}</span>
+            </label>
+        `;
+    });
+    html += '</div>';
+    html += '<button onclick="confirmHighlights()" style="margin-top:8px;">✅ 确认写入本章亮点</button>';
+    box.innerHTML = html;
 }
 
 // ============ 定稿 ============

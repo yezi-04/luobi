@@ -592,3 +592,71 @@ async function extractToMemory() {
         console.warn('[Memory] 提取失败', e);
     }
 }
+/**
+ * 从正文提取亮点
+ * @param {string} chapterContent - 正文内容
+ * @returns {Promise<{highlights: string[], raw: string|null, error: string|null}>}
+ */
+async function extractHighlights(chapterContent) {
+    const apiKey = DataCore.getApiKey();
+    if (!apiKey) return { highlights: [], raw: null, error: '未配置 API Key' };
+
+    const systemPrompt = `你是读者审阅员。请从以下正文中提取 2-5 条最打动你的亮点。
+
+亮点定义：让读者心颤、沉默、或印象深刻的瞬间。可以是句子、意象、动作节奏。
+
+严格按 JSON 返回：
+{
+  "highlights": [
+    "林醒攥紧铁牌直到指节发白",
+    "结尾处裂月突然变亮的三秒停顿"
+  ]
+}
+
+只提取真正有力量的瞬间，不要凑数。`;
+
+    try {
+        const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey}`
+            },
+            body: JSON.stringify({
+                model: 'deepseek-chat',
+                messages: [
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: chapterContent.substring(0, 8000) }
+                ],
+                stream: false,
+                max_tokens: 500,
+                temperature: 0.3
+            })
+        });
+
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            return { highlights: [], raw: null, error: err.error?.message || `请求失败 (${response.status})` };
+        }
+
+        const data = await response.json();
+        const aiText = data.choices[0].message.content;
+        const jsonMatch = aiText.match(/\{[\s\S]*\}/);
+
+        if (!jsonMatch) {
+            return { highlights: [], raw: aiText, error: null };
+        }
+
+        try {
+            const parsed = JSON.parse(jsonMatch[0]);
+            if (!Array.isArray(parsed.highlights)) {
+                return { highlights: [], raw: aiText, error: null };
+            }
+            return { highlights: parsed.highlights, raw: null, error: null };
+        } catch (e) {
+            return { highlights: [], raw: aiText, error: null };
+        }
+    } catch (e) {
+        return { highlights: [], raw: null, error: e.message };
+    }
+}

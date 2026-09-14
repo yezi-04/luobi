@@ -903,3 +903,25 @@ body.resizing .chat-area { pointer-events: none; }
         opacity: 1;
     }
 }
+/* ============ 亮点勾选面板 ============ */
+.highlight-list {
+    margin: 8px 0;
+}
+.highlight-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 6px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    line-height: 1.5;
+}
+.highlight-item:hover {
+    background: var(--button-hover);
+}
+.highlight-item input[type="checkbox"] {
+    margin-top: 3px;
+    flex-shrink: 0;
+    accent-color: var(--accent);
+}
