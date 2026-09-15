@@ -216,7 +216,12 @@
             <div id="round2Box" style="display:none;"></div>
 
             <button onclick="finalizeChapter()" id="btnFinalize" disabled>📌 标记为定稿</button>
+            <button onclick="unlockChapter()" id="btnUnlock" class="finalize-primary-btn" style="display:none;">🔓 解锁章节</button>
             <button onclick="cancelFinalize()" class="cancel-btn">↩️ 取消定稿流程</button>
+        </div>
+        
+        <div class="archive-view-box" id="archiveViewBox">
+            <p class="archive-empty">本章暂无档案</p>
         </div>
 
         <div class="finalize-reports" id="finalizeReports">

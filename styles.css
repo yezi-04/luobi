@@ -925,3 +925,45 @@ body.resizing .chat-area { pointer-events: none; }
     flex-shrink: 0;
     accent-color: var(--accent);
 }
+
+/* ============ 档案展示区 ============ */
+.archive-view-box {
+    margin-top: 12px;
+    padding: 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: var(--chat-bg);
+    font-size: 12px;
+    line-height: 1.6;
+}
+.archive-header {
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: var(--text-color);
+}
+.archive-field {
+    margin: 4px 0;
+    color: var(--text-secondary);
+}
+.archive-field span {
+    font-weight: 500;
+    color: var(--text-color);
+}
+.archive-highlights {
+    margin: 4px 0 4px 16px;
+    padding: 0;
+    color: var(--text-secondary);
+}
+.archive-highlights li { margin: 2px 0; }
+.archive-footer {
+    margin-top: 8px;
+    font-size: 10px;
+    color: var(--text-tertiary);
+}
+.archive-empty {
+    font-size: 11px;
+    color: var(--text-tertiary);
+    text-align: center;
+    padding: 8px;
+    margin: 0;
+}

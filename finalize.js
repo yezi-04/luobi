@@ -37,6 +37,7 @@ function loadFinalizeData() {
     const editor = document.getElementById('editor');
     if (editor) editor.readOnly = (finalizeState === 'finalized');
     updateFinalizeChapterBadge();
+    renderArchiveView();
 }
 
 function resetFinalizeData() {
@@ -77,6 +78,22 @@ function updateFinalizeUI() {
     if (btnRound1Done) btnRound1Done.disabled = finalizeState !== 'round1';
     if (btnRound2) btnRound2.disabled = finalizeState !== 'round1done';
     if (btnFinalize) btnFinalize.disabled = finalizeState !== 'round2';
+    // 解锁按钮与取消按钮互斥：finalized 时隐藏 cancel，避免语义重叠
+    const btnCancel = document.querySelector('.cancel-btn');
+    if (btnCancel) {
+        btnCancel.style.display = (finalizeState === 'finalized') ? 'none' : '';
+    }
+    // 解锁/定稿按钮互斥显隐
+    const btnUnlock = document.getElementById('btnUnlock');
+    if (btnUnlock) {
+        if (finalizeState === 'finalized') {
+            btnUnlock.style.display = '';
+            if (btnFinalize) btnFinalize.style.display = 'none';
+        } else {
+            btnUnlock.style.display = 'none';
+            if (btnFinalize) btnFinalize.style.display = '';
+        }
+    }
 }
 
 // ============ 一键全部 ============
@@ -461,6 +478,134 @@ async function finalizeChapterInternal() {
     alert('✅ 本章已定稿。');
 }
 
+// ============ 解锁章节 ============
+async function unlockChapter() {
+    const chapterId = DataCore.getCurrentChapterId();
+    if (!chapterId) { alert('未找到当前章节'); return; }
+
+    if (!confirm(
+        '确定解锁此章节？\n\n' +
+        '解锁后：\n' +
+        '· 章节档案将返回工作区（可被二次定稿更新）\n' +
+        '· 编辑器解除只读\n' +
+        '· 可重新走完整定稿流程\n' +
+        '· 上次定稿的硬伤和亮点记录将清空（定稿报告仍保留）\n\n' +
+        '注意：历史报告不会清空，二次定稿会追加新报告。'
+    )) return;
+
+    const memory = await DataCore.getMemory();
+
+    // 档案迁回（仅当历史层有档案时执行迁回，但持久化无条件执行）
+    if (memory.historicalChapterArchives?.[chapterId]) {
+        restoreArchive(memory, chapterId);
+    }
+
+    try {
+        await DataCore.setMemory(memory);
+    } catch (e) {
+        alert('保存记忆库失败，章节未解锁');
+        console.error('setMemory failed:', e);
+        return;
+    }
+
+    // 状态复位
+    finalizeState = 'none';
+    chapterHardInjuries = [];
+    chapterHighlights = [];
+
+    const editor = document.getElementById('editor');
+    if (editor) editor.readOnly = false;
+
+    updateFinalizeUI();
+    saveFinalizeData();
+    if (typeof renderToc === 'function') renderToc();
+    updateFinalizeChapterBadge();
+
+    // setMemory 会触发 memory:updated → renderArchiveView
+    // 这里手动 await 是为了保证本次操作的渲染顺序（内存状态已复位后再渲染）
+    await renderArchiveView();
+    showToast('章节已解锁，可重新编辑', 'success');
+}
+
+/**
+ * 档案迁回：历史层 → 当前层，删除 archivedAt
+ */
+function restoreArchive(memory, chapterId) {
+    const archived = memory.historicalChapterArchives?.[chapterId];
+    if (!archived) return false;
+
+    memory.chapterArchives = memory.chapterArchives || {};
+    memory.chapterArchives[chapterId] = {
+        goal: archived.goal || '',
+        involvedCharacterIds: [...(archived.involvedCharacterIds || [])],
+        involvedLocationIds: [...(archived.involvedLocationIds || [])],
+        highlights: [...(archived.highlights || [])],
+        notes: archived.notes || '',
+        tone: archived.tone || ''
+        // 不复制 archivedAt
+    };
+
+    delete memory.historicalChapterArchives[chapterId];
+    return true;
+}
+
+// ============ 档案只读展示 ============
+async function renderArchiveView() {
+    const box = document.getElementById('archiveViewBox');
+    if (!box) return;
+
+    const chapterId = DataCore.getCurrentChapterId();
+    if (!chapterId) {
+        box.innerHTML = '<p class="archive-empty">未选择章节</p>';
+        return;
+    }
+
+    const memory = await DataCore.getMemory();
+
+    // 数据源切换：当前层优先，回退历史层
+    let archive = null;
+    let source = '';
+    if (memory.chapterArchives?.[chapterId]) {
+        archive = memory.chapterArchives[chapterId];
+        source = 'working';
+    } else if (memory.historicalChapterArchives?.[chapterId]) {
+        archive = memory.historicalChapterArchives[chapterId];
+        source = 'archived';
+    }
+
+    if (!archive) {
+        box.innerHTML = '<p class="archive-empty">本章暂无档案</p>';
+        return;
+    }
+
+    const layerLabel = source === 'working' ? '📝 工作档案（编辑中）' : '📁 已归档';
+    let html = `<div class="archive-header">${layerLabel}</div>`;
+
+    // 注意：escapeHTML 不转义引号，当前用法只在文本节点上下文，安全。
+    // 如需在属性上下文使用，改用 DOM textContent 方式或扩展 escapeHTML。
+    html += `<div class="archive-field"><span>目标：</span>${escapeHTML(archive.goal || '—')}</div>`;
+    html += `<div class="archive-field"><span>基调：</span>${escapeHTML(archive.tone || '—')}</div>`;
+    html += `<div class="archive-field"><span>备注：</span>${escapeHTML(archive.notes || '—')}</div>`;
+
+    if (archive.highlights && archive.highlights.length > 0) {
+        html += `<div class="archive-field"><span>亮点：</span></div>`;
+        html += '<ul class="archive-highlights">';
+        archive.highlights.forEach(h => {
+            html += `<li>${escapeHTML(h)}</li>`;
+        });
+        html += '</ul>';
+    }
+
+    if (source === 'archived') {
+        const time = archive.archivedAt
+            ? new Date(archive.archivedAt).toLocaleString()
+            : '归档时间未知';
+        html += `<div class="archive-footer">归档于：${time}</div>`;
+    }
+
+    box.innerHTML = html;
+}
+
 function cancelFinalize() {
     if (!confirm('确定取消定稿流程并清空所有记录吗？')) return;
     resetFinalizeData();
@@ -600,4 +745,10 @@ function showDraftDiff() {
 DataCore.on('chapter:switched', () => {
     loadFinalizeData();
     refreshReportList();
+    renderArchiveView();
+});
+
+// 记忆库变化时刷新档案展示（定稿/解锁/亮点写入都会触发）
+DataCore.on('memory:updated', () => {
+    renderArchiveView();
 });

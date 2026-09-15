@@ -533,6 +533,8 @@ function initChapters() {
     if (currentId) {
         document.getElementById('editor').value = loadContent(currentId) || '';
         renderToc();
+        // 页面加载时同步定稿面板状态（此路径不触发 chapter:switched）
+        if (typeof loadFinalizeData === 'function') loadFinalizeData();
     } else {
         const firstChapter = findFirstChapter();
         if (firstChapter) openChapter(firstChapter.id);
