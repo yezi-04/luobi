@@ -617,6 +617,18 @@ async function extractHighlights(chapterContent) {
     }
 }
 /**
+ * 字段合并：undefined 回退旧值；null 和 '' 都表示清空
+ * - newVal === undefined：调用方未提供，保留历史值
+ * - newVal === null 或 ''：主动清空
+ * - 其他：正常覆盖
+ */
+function mergeField(newVal, oldVal, defaultVal = '') {
+    if (newVal === undefined) return oldVal ?? defaultVal;
+    if (newVal === null) return defaultVal;
+    return newVal;
+}
+
+/**
  * 归档章节：将档案从当前层迁移到历史层
  * 支持字段合并：新档案有值的字段覆盖，空字段回退旧值
  */
@@ -626,7 +638,7 @@ function archiveChapter(memory, chapterId, archive) {
     const oldArchive = memory.historicalChapterArchives[chapterId] || {};
 
     memory.historicalChapterArchives[chapterId] = {
-        goal: archive.goal || oldArchive.goal || '',
+        goal: mergeField(archive.goal, oldArchive.goal, ''),
         involvedCharacterIds: (archive.involvedCharacterIds && archive.involvedCharacterIds.length > 0)
             ? [...archive.involvedCharacterIds]
             : (oldArchive.involvedCharacterIds || []),
@@ -636,11 +648,11 @@ function archiveChapter(memory, chapterId, archive) {
         highlights: (archive.highlights && archive.highlights.length > 0)
             ? [...archive.highlights]
             : (oldArchive.highlights || []),
-        notes: archive.notes || oldArchive.notes || '',
-        tone: archive.tone || oldArchive.tone || '',
+        notes: mergeField(archive.notes, oldArchive.notes, ''),
+        tone: mergeField(archive.tone, oldArchive.tone, ''),
         archivedAt: Date.now()
     };
-
+    
     if (memory.chapterArchives) {
         delete memory.chapterArchives[chapterId];
     }

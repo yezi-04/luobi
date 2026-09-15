@@ -967,3 +967,26 @@ body.resizing .chat-area { pointer-events: none; }
     padding: 8px;
     margin: 0;
 }
+/* ============ 档案编辑态 ============ */
+.archive-input,
+.archive-textarea {
+    width: 100%;
+    padding: 4px 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--input-bg);
+    color: var(--text-color);
+    font-size: 12px;
+    font-family: inherit;
+    outline: none;
+    transition: border-color 0.15s;
+}
+.archive-input:focus,
+.archive-textarea:focus {
+    border-color: var(--accent);
+}
+.archive-textarea {
+    min-height: 60px;
+    resize: vertical;
+    line-height: 1.5;
+}

@@ -549,10 +549,17 @@ function restoreArchive(memory, chapterId) {
     return true;
 }
 
-// ============ 档案只读展示 ============
+// ============ 档案展示（双态：只读/编辑） ============
 async function renderArchiveView() {
     const box = document.getElementById('archiveViewBox');
     if (!box) return;
+
+    // 若焦点在档案字段内，跳过重建（避免打断输入）
+    const activeEl = document.activeElement;
+    if (activeEl && box.contains(activeEl) &&
+        (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA')) {
+        return;
+    }
 
     const chapterId = DataCore.getCurrentChapterId();
     if (!chapterId) {
@@ -578,15 +585,26 @@ async function renderArchiveView() {
         return;
     }
 
-    const layerLabel = source === 'working' ? '📝 工作档案（编辑中）' : '📁 已归档';
+    const editable = (source === 'working');
+    const layerLabel = editable ? '📝 工作档案（编辑中）' : '📁 已归档';
     let html = `<div class="archive-header">${layerLabel}</div>`;
 
-    // 注意：escapeHTML 不转义引号，当前用法只在文本节点上下文，安全。
-    // 如需在属性上下文使用，改用 DOM textContent 方式或扩展 escapeHTML。
-    html += `<div class="archive-field"><span>目标：</span>${escapeHTML(archive.goal || '—')}</div>`;
-    html += `<div class="archive-field"><span>基调：</span>${escapeHTML(archive.tone || '—')}</div>`;
-    html += `<div class="archive-field"><span>备注：</span>${escapeHTML(archive.notes || '—')}</div>`;
+    if (editable) {
+        // 编辑态：goal / tone 用 input，notes 用 textarea
+        html += `<div class="archive-field"><span>目标：</span>`;
+        html += `<input class="archive-input" data-field="goal" oninput="onArchiveFieldInput(this)"></div>`;
+        html += `<div class="archive-field"><span>基调：</span>`;
+        html += `<input class="archive-input" data-field="tone" oninput="onArchiveFieldInput(this)"></div>`;
+        html += `<div class="archive-field"><span>备注：</span>`;
+        html += `<textarea class="archive-textarea" data-field="notes" oninput="onArchiveFieldInput(this)"></textarea></div>`;
+    } else {
+        // 只读态
+        html += `<div class="archive-field"><span>目标：</span>${escapeHTML(archive.goal || '—')}</div>`;
+        html += `<div class="archive-field"><span>基调：</span>${escapeHTML(archive.tone || '—')}</div>`;
+        html += `<div class="archive-field"><span>备注：</span>${escapeHTML(archive.notes || '—')}</div>`;
+    }
 
+    // 亮点（只读）
     if (archive.highlights && archive.highlights.length > 0) {
         html += `<div class="archive-field"><span>亮点：</span></div>`;
         html += '<ul class="archive-highlights">';
@@ -596,6 +614,7 @@ async function renderArchiveView() {
         html += '</ul>';
     }
 
+    // 归档时间（仅已归档态）
     if (source === 'archived') {
         const time = archive.archivedAt
             ? new Date(archive.archivedAt).toLocaleString()
@@ -604,6 +623,46 @@ async function renderArchiveView() {
     }
 
     box.innerHTML = html;
+
+    // 编辑态：用 DOM 方式填充 value（避免属性上下文转义问题）
+    if (editable) {
+        box.querySelectorAll('.archive-input').forEach(inp => {
+            inp.value = archive[inp.dataset.field] || '';
+        });
+        const ta = box.querySelector('.archive-textarea');
+        if (ta) ta.value = archive.notes || '';
+    }
+}
+
+// ============ 档案字段编辑（防抖保存 + 串行化避免读-改-写竞态） ============
+const archiveSaveTimers = {};
+let archiveSaveChain = Promise.resolve();
+
+function onArchiveFieldInput(el) {
+    // 捕获当前章节：即使 1s 内切换章节，也保存到原章节
+    const chapterId = DataCore.getCurrentChapterId();
+    const field = el.dataset.field;
+    const value = el.value;
+    const key = `${chapterId}:${field}`;
+
+    // 只清除同字段的未决计时器；不同字段互不影响
+    if (archiveSaveTimers[key]) clearTimeout(archiveSaveTimers[key]);
+    archiveSaveTimers[key] = setTimeout(() => {
+        delete archiveSaveTimers[key];
+        // 串行化：后一个任务等前一个 getMemory→setMemory 完成后再执行
+        // 这样后一个 getMemory 必然看到前一个的写入，消除竞态
+        archiveSaveChain = archiveSaveChain
+            .then(async () => {
+                const memory = await DataCore.getMemory();
+                if (memory.chapterArchives?.[chapterId]) {
+                    memory.chapterArchives[chapterId][field] = value;
+                    await DataCore.setMemory(memory);
+                }
+            })
+            .catch(e => {
+                console.error('[Archive] 字段保存失败:', e);
+            });
+    }, 1000);
 }
 
 function cancelFinalize() {
@@ -743,6 +802,10 @@ function showDraftDiff() {
 
 // ============ 初始化 ============
 DataCore.on('chapter:switched', () => {
+    // 先失焦，避免 renderArchiveView 的焦点检查误判为"编辑中"
+    if (document.activeElement && document.activeElement.blur) {
+        document.activeElement.blur();
+    }
     loadFinalizeData();
     refreshReportList();
     renderArchiveView();
